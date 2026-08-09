@@ -28,6 +28,8 @@
     <script src="https://unpkg.com/react@18/umd/react.production.min.js" crossorigin></script>
     <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js" crossorigin></script>
     <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+    <!-- Supabase JS v2: Auth + Database -->
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 
     <style>
         /* Desain Scrollbar mirip Aplikasi Native */
@@ -59,6 +61,35 @@
 
     <script type="text/babel">
         const { useState, useEffect, useMemo } = React;
+
+        // ==========================================
+        // SUPABASE CONFIGURATION
+        // Isi 2 nilai ini dari Supabase > Project > Connect / API Keys.
+        // Gunakan PUBLISHABLE KEY (sb_publishable_...), BUKAN secret/service_role key.
+        // ==========================================
+        const SUPABASE_URL = 'PASTE_SUPABASE_URL_HERE';
+        const SUPABASE_PUBLISHABLE_KEY = 'PASTE_SUPABASE_PUBLISHABLE_KEY_HERE';
+        const SUPABASE_CONFIGURED =
+            SUPABASE_URL.startsWith('https://') &&
+            !SUPABASE_URL.includes('PASTE_') &&
+            SUPABASE_PUBLISHABLE_KEY.startsWith('sb_publishable_');
+
+        const siklusDb = SUPABASE_CONFIGURED
+            ? window.supabase.createClient(SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY, {
+                auth: {
+                    persistSession: true,
+                    autoRefreshToken: true,
+                    detectSessionInUrl: true
+                }
+            })
+            : null;
+
+        const getLocalDateString = (date = new Date()) => {
+            const y = date.getFullYear();
+            const m = String(date.getMonth() + 1).padStart(2, '0');
+            const d = String(date.getDate()).padStart(2, '0');
+            return `${y}-${m}-${d}`;
+        };
 
         // ==========================================
         // 1. PEMETAAN IKON (LUCIDE ICONS MURNI)
@@ -109,70 +140,370 @@
         // 2. APLIKASI UTAMA (REACT COMPONENT)
         // ==========================================
         const App = () => {
-            const [userName, setUserName] = useState(() => localStorage.getItem('siklusku_name') || '');
-            const [userAge, setUserAge] = useState(() => localStorage.getItem('siklusku_age') || '');
-            const [showOnboarding, setShowOnboarding] = useState(!localStorage.getItem('siklusku_name'));
+            // ---------- AUTH / CLOUD STATE ----------
+            const [session, setSession] = useState(null);
+            const [authLoading, setAuthLoading] = useState(true);
+            const [profileLoading, setProfileLoading] = useState(false);
+            const [profileReady, setProfileReady] = useState(false);
+            const [showOnboarding, setShowOnboarding] = useState(false);
+            const [authMode, setAuthMode] = useState('login');
+            const [authEmail, setAuthEmail] = useState('');
+            const [authPassword, setAuthPassword] = useState('');
+            const [authError, setAuthError] = useState('');
+            const [authMessage, setAuthMessage] = useState('');
+            const [authBusy, setAuthBusy] = useState(false);
+            const [syncState, setSyncState] = useState('idle');
+
+            // ---------- USER / APP STATE ----------
+            // localStorage hanya dipakai sebagai fallback migrasi data V1 dan preferensi tema.
+            const [userName, setUserName] = useState('');
+            const [userAge, setUserAge] = useState('');
 
             const [lastPeriodDate, setLastPeriodDate] = useState(() => {
-                const saved = localStorage.getItem('siklusku_lastPeriod');
-                if (saved) return saved;
+                const legacy = localStorage.getItem('siklusku_lastPeriod');
+                if (legacy) return legacy;
                 const d = new Date();
-                d.setDate(d.getDate() - 2); 
-                return d.toISOString().split('T')[0];
+                d.setDate(d.getDate() - 2);
+                return getLocalDateString(d);
             });
             const [cycleLength, setCycleLength] = useState(() => parseInt(localStorage.getItem('siklusku_cycle')) || 28);
             const [periodLength, setPeriodLength] = useState(() => parseInt(localStorage.getItem('siklusku_period')) || 5);
-            
+
             const [isDarkMode, setIsDarkMode] = useState(() => localStorage.getItem('siklusku_theme') === 'dark');
             const [isSidebarOpen, setIsSidebarOpen] = useState(false);
             const [activeTab, setActiveTab] = useState('beranda');
-            
+
             const [waterGlasses, setWaterGlasses] = useState(0);
             const [currentMood, setCurrentMood] = useState(null);
-            
+
             const [cheeringMessage, setCheeringMessage] = useState("");
             const [messageKey, setMessageKey] = useState(0);
-            
+
             const [currentMonth, setCurrentMonth] = useState(new Date().getMonth());
             const [currentYear, setCurrentYear] = useState(new Date().getFullYear());
             const [selectedArticle, setSelectedArticle] = useState(null);
 
-            const [tempName, setTempName] = useState('');
-            const [tempAge, setTempAge] = useState('');
+            const [tempName, setTempName] = useState(() => localStorage.getItem('siklusku_name') || '');
+            const [tempAge, setTempAge] = useState(() => localStorage.getItem('siklusku_age') || '');
 
+            const currentUserId = session?.user?.id || null;
+            const todayString = getLocalDateString();
+
+            const friendlyAuthError = (message = '') => {
+                const text = message.toLowerCase();
+                if (text.includes('invalid login credentials')) return 'Email atau password salah.';
+                if (text.includes('email not confirmed')) return 'Email belum diverifikasi. Cek inbox email kamu.';
+                if (text.includes('user already registered')) return 'Email ini sudah terdaftar. Silakan masuk.';
+                if (text.includes('password should be')) return 'Password belum memenuhi panjang minimum Supabase.';
+                if (text.includes('rate limit')) return 'Terlalu banyak percobaan. Coba lagi beberapa saat.';
+                return message || 'Terjadi kesalahan. Coba lagi.';
+            };
+
+            // Restore session Supabase. Menghapus cache/session dapat membuat pengguna login ulang,
+            // tetapi data aplikasi tetap berada di database.
             useEffect(() => {
-                if (userName) localStorage.setItem('siklusku_name', userName);
-                if (userAge) localStorage.setItem('siklusku_age', userAge);
-                localStorage.setItem('siklusku_lastPeriod', lastPeriodDate);
-                localStorage.setItem('siklusku_cycle', cycleLength);
-                localStorage.setItem('siklusku_period', periodLength);
-            }, [userName, userAge, lastPeriodDate, cycleLength, periodLength]);
+                if (!siklusDb) {
+                    setAuthLoading(false);
+                    return;
+                }
 
+                let mounted = true;
+                siklusDb.auth.getSession().then(({ data, error }) => {
+                    if (!mounted) return;
+                    if (error) setAuthError(friendlyAuthError(error.message));
+                    setSession(data?.session || null);
+                    setAuthLoading(false);
+                });
+
+                const { data: authListener } = siklusDb.auth.onAuthStateChange((event, nextSession) => {
+                    setSession(nextSession);
+                    setAuthLoading(false);
+                    if (event === 'PASSWORD_RECOVERY') {
+                        setAuthMode('reset');
+                        setAuthMessage('Buat password baru untuk akun SiklusKu kamu.');
+                    }
+                    if (event === 'SIGNED_OUT') {
+                        setProfileReady(false);
+                        setShowOnboarding(false);
+                        setUserName('');
+                        setUserAge('');
+                        setWaterGlasses(0);
+                        setCurrentMood(null);
+                    }
+                });
+
+                return () => {
+                    mounted = false;
+                    authListener?.subscription?.unsubscribe();
+                };
+            }, []);
+
+            // Load seluruh data awal milik user setelah session tersedia.
+            useEffect(() => {
+                if (!siklusDb || !currentUserId) return;
+                let cancelled = false;
+
+                const loadUserData = async () => {
+                    setProfileLoading(true);
+                    setProfileReady(false);
+                    setSyncState('syncing');
+                    setAuthError('');
+
+                    try {
+                        const [profileResult, settingsResult, dailyResult] = await Promise.all([
+                            siklusDb.from('profiles')
+                                .select('display_name, age, onboarding_completed')
+                                .eq('id', currentUserId)
+                                .maybeSingle(),
+                            siklusDb.from('cycle_settings')
+                                .select('last_period_date, cycle_length, period_length, theme')
+                                .eq('user_id', currentUserId)
+                                .maybeSingle(),
+                            siklusDb.from('daily_logs')
+                                .select('mood, water_glasses')
+                                .eq('user_id', currentUserId)
+                                .eq('log_date', todayString)
+                                .maybeSingle()
+                        ]);
+
+                        const firstError = profileResult.error || settingsResult.error || dailyResult.error;
+                        if (firstError) throw firstError;
+                        if (cancelled) return;
+
+                        const profile = profileResult.data;
+                        const settings = settingsResult.data;
+                        const daily = dailyResult.data;
+
+                        if (profile?.onboarding_completed) {
+                            setUserName(profile.display_name || 'Pengguna');
+                            setUserAge(profile.age ? String(profile.age) : '');
+                            setTempName(profile.display_name || '');
+                            setTempAge(profile.age ? String(profile.age) : '');
+                            setShowOnboarding(false);
+                        } else {
+                            const metadataName = session?.user?.user_metadata?.display_name || '';
+                            setTempName(localStorage.getItem('siklusku_name') || metadataName);
+                            setTempAge(localStorage.getItem('siklusku_age') || '');
+                            setShowOnboarding(true);
+                        }
+
+                        if (settings) {
+                            if (settings.last_period_date) setLastPeriodDate(settings.last_period_date);
+                            if (settings.cycle_length) setCycleLength(settings.cycle_length);
+                            if (settings.period_length) setPeriodLength(settings.period_length);
+                            if (settings.theme) setIsDarkMode(settings.theme === 'dark');
+                        }
+
+                        setCurrentMood(daily?.mood ?? null);
+                        setWaterGlasses(daily?.water_glasses ?? 0);
+                        setProfileReady(true);
+                        setSyncState('synced');
+                    } catch (error) {
+                        if (!cancelled) {
+                            console.error('Gagal memuat data user:', error);
+                            setAuthError('Data akun belum bisa dimuat. Pastikan SQL setup Supabase sudah dijalankan.');
+                            setSyncState('error');
+                        }
+                    } finally {
+                        if (!cancelled) setProfileLoading(false);
+                    }
+                };
+
+                loadUserData();
+                return () => { cancelled = true; };
+            }, [currentUserId]);
+
+            // Tema tetap dicache lokal agar tidak berkedip saat aplikasi baru dibuka.
             useEffect(() => {
                 if (isDarkMode) {
-                document.documentElement.classList.add('dark');
-                localStorage.setItem('siklusku_theme', 'dark');
+                    document.documentElement.classList.add('dark');
+                    localStorage.setItem('siklusku_theme', 'dark');
                 } else {
-                document.documentElement.classList.remove('dark');
-                localStorage.setItem('siklusku_theme', 'light');
+                    document.documentElement.classList.remove('dark');
+                    localStorage.setItem('siklusku_theme', 'light');
                 }
             }, [isDarkMode]);
 
-            const handleStartApp = (e) => {
+            // Sinkronisasi pengaturan siklus ke cloud setelah remote state selesai dimuat.
+            useEffect(() => {
+                if (!siklusDb || !currentUserId || !profileReady || showOnboarding) return;
+
+                setSyncState('syncing');
+                const timer = setTimeout(async () => {
+                    const { error } = await siklusDb.from('cycle_settings').upsert({
+                        user_id: currentUserId,
+                        last_period_date: lastPeriodDate,
+                        cycle_length: cycleLength,
+                        period_length: periodLength,
+                        theme: isDarkMode ? 'dark' : 'light',
+                        updated_at: new Date().toISOString()
+                    }, { onConflict: 'user_id' });
+
+                    if (error) {
+                        console.error('Gagal sinkron pengaturan:', error);
+                        setSyncState('error');
+                    } else {
+                        setSyncState('synced');
+                    }
+                }, 450);
+
+                return () => clearTimeout(timer);
+            }, [currentUserId, profileReady, showOnboarding, lastPeriodDate, cycleLength, periodLength, isDarkMode]);
+
+            const handleAuthSubmit = async (e) => {
                 e.preventDefault();
-                if (tempName.trim() !== '' && tempAge !== '') {
-                setUserName(tempName);
-                setUserAge(tempAge);
-                setShowOnboarding(false);
+                if (!siklusDb) return;
+                setAuthBusy(true);
+                setAuthError('');
+                setAuthMessage('');
+
+                try {
+                    if (authMode === 'register') {
+                        const { data, error } = await siklusDb.auth.signUp({
+                            email: authEmail.trim(),
+                            password: authPassword
+                        });
+                        if (error) throw error;
+
+                        if (!data.session) {
+                            setAuthMessage('Akun dibuat. Cek email kamu untuk verifikasi, lalu masuk ke SiklusKu.');
+                            setAuthMode('login');
+                            setAuthPassword('');
+                        } else {
+                            setAuthMessage('Akun berhasil dibuat. Lengkapi profil SiklusKu kamu.');
+                        }
+                    } else {
+                        const { error } = await siklusDb.auth.signInWithPassword({
+                            email: authEmail.trim(),
+                            password: authPassword
+                        });
+                        if (error) throw error;
+                        setAuthPassword('');
+                    }
+                } catch (error) {
+                    setAuthError(friendlyAuthError(error.message));
+                } finally {
+                    setAuthBusy(false);
                 }
             };
 
-            const handleLogout = () => {
-                localStorage.removeItem('siklusku_name');
-                localStorage.removeItem('siklusku_age');
-                setUserName(''); setUserAge(''); setTempName(''); setTempAge('');
-                setShowOnboarding(true); setIsSidebarOpen(false);
+            const handleForgotPassword = async () => {
+                if (!siklusDb || !authEmail.trim()) {
+                    setAuthError('Masukkan email akun terlebih dahulu.');
+                    return;
+                }
+                setAuthBusy(true);
+                setAuthError('');
+                const { error } = await siklusDb.auth.resetPasswordForEmail(authEmail.trim());
+                if (error) setAuthError(friendlyAuthError(error.message));
+                else setAuthMessage('Link reset password sudah dikirim ke email kamu.');
+                setAuthBusy(false);
             };
+
+            const handleUpdatePassword = async (e) => {
+                e.preventDefault();
+                if (!siklusDb || authPassword.length < 6) {
+                    setAuthError('Gunakan password minimal 6 karakter.');
+                    return;
+                }
+                setAuthBusy(true);
+                setAuthError('');
+                const { error } = await siklusDb.auth.updateUser({ password: authPassword });
+                if (error) {
+                    setAuthError(friendlyAuthError(error.message));
+                } else {
+                    setAuthMessage('Password berhasil diperbarui.');
+                    setAuthPassword('');
+                    setAuthMode('login');
+                }
+                setAuthBusy(false);
+            };
+
+            const handleStartApp = async (e) => {
+                e.preventDefault();
+                if (!siklusDb || !currentUserId || !tempName.trim() || !tempAge) return;
+
+                const parsedAge = Number(tempAge);
+                if (parsedAge < 10 || parsedAge > 80) {
+                    setAuthError('Umur harus berada di antara 10 sampai 80 tahun.');
+                    return;
+                }
+
+                setAuthBusy(true);
+                setAuthError('');
+                setSyncState('syncing');
+
+                try {
+                    const { error: profileError } = await siklusDb.from('profiles').upsert({
+                        id: currentUserId,
+                        display_name: tempName.trim(),
+                        age: parsedAge,
+                        onboarding_completed: true,
+                        updated_at: new Date().toISOString()
+                    }, { onConflict: 'id' });
+                    if (profileError) throw profileError;
+
+                    const { error: settingsError } = await siklusDb.from('cycle_settings').upsert({
+                        user_id: currentUserId,
+                        last_period_date: lastPeriodDate,
+                        cycle_length: cycleLength,
+                        period_length: periodLength,
+                        theme: isDarkMode ? 'dark' : 'light',
+                        updated_at: new Date().toISOString()
+                    }, { onConflict: 'user_id' });
+                    if (settingsError) throw settingsError;
+
+                    setUserName(tempName.trim());
+                    setUserAge(String(parsedAge));
+                    setShowOnboarding(false);
+                    setProfileReady(true);
+                    setSyncState('synced');
+
+                    // Bersihkan data profil V1 setelah migrasi berhasil agar akun berbeda tidak tercampur.
+                    ['siklusku_name', 'siklusku_age', 'siklusku_lastPeriod', 'siklusku_cycle', 'siklusku_period']
+                        .forEach(key => localStorage.removeItem(key));
+                } catch (error) {
+                    console.error('Gagal menyimpan onboarding:', error);
+                    setAuthError('Profil belum tersimpan. Pastikan tabel dan RLS Supabase sudah benar.');
+                    setSyncState('error');
+                } finally {
+                    setAuthBusy(false);
+                }
+            };
+
+            const handleLogout = async () => {
+                setIsSidebarOpen(false);
+                if (!siklusDb) return;
+                const { error } = await siklusDb.auth.signOut();
+                if (error) setAuthError(friendlyAuthError(error.message));
+                else {
+                    setAuthMode('login');
+                    setAuthMessage('Kamu sudah keluar dari SiklusKu.');
+                }
+            };
+
+            const saveDailyLog = async (patch) => {
+                if (!siklusDb || !currentUserId || !profileReady) return;
+                setSyncState('syncing');
+                const { error } = await siklusDb.from('daily_logs').upsert({
+                    user_id: currentUserId,
+                    log_date: todayString,
+                    ...patch,
+                    updated_at: new Date().toISOString()
+                }, { onConflict: 'user_id,log_date' });
+                if (error) {
+                    console.error('Gagal menyimpan jurnal harian:', error);
+                    setSyncState('error');
+                } else {
+                    setSyncState('synced');
+                }
+            };
+
+            const updateWaterGlasses = (value) => {
+                setWaterGlasses(value);
+                saveDailyLog({ water_glasses: value });
+            };
+
             const moodQuotes = {
                 0: ["Peluk jauh! 🫂 Ingat, kamu kuat dan rasa ini bakal berlalu kok.", "Nggak apa-apa sedih, wajar kok! Makan cokelat gih sana, aku izinkan! 🍫", "Air mata itu ibarat keringatnya hati yang lagi olahraga. Nangis aja kalau perlu! 💦", "Ugh, rahim emang kadang ngeselin! Ayo rebahan aja, kamu berhak istirahat! 🛏️", "Dunia mungkin terasa berat hari ini, tapi pundakmu lebih kuat dari yang kamu kira! 💪"],
                 1: ["Tarik napas panjang... hembuskan. Kamu sudah melakukan yang terbaik hari ini! ✨", "Cemas itu cuma pikiran jahat yang numpang lewat. Kamu aman, kamu disayangi! ❤️", "Overthinking nggak akan nambahin saldo rekening. Yuk, istirahat dulu pikirannya! 🧘‍♀️", "Semua akan baik-baik saja. Kalau belum baik, berarti belum selesai! 🎬", "Hormon emang suka bercanda! Sabar ya, besok pasti lebih tenang! 🌈"],
@@ -183,6 +514,7 @@
 
             const handleMoodClick = (idx) => {
                 setCurrentMood(idx);
+                saveDailyLog({ mood: idx });
                 const quotes = moodQuotes[idx];
                 let randomIndex = Math.floor(Math.random() * quotes.length);
                 while (quotes[randomIndex] === cheeringMessage && quotes.length > 1) {
@@ -235,36 +567,152 @@
                 { id: 6, category: "Kesehatan", icon: MoonIcon, time: "5 min baca", title: "Pentingnya Menjaga Kualitas Tidur Menjelang Hari H", desc: "Mengapa insomnia sering menyerang saat PMS dan bagaimana cara mengatasinya.", content: ["Pernahkah kamu merasa sangat sulit tidur beberapa hari sebelum menstruasi dimulai? Kamu tidak sendirian. Penurunan drastis hormon progesteron menjelang hari H seringkali memicu insomnia, kecemasan di malam hari, dan peningkatan suhu tubuh yang membuat tidur tidak nyenyak.", "Kurang tidur saat PMS akan memperparah gejala lainnya seperti kram, perubahan mood, dan rasa lelah berlebih. Oleh karena itu, *sleep hygiene* menjadi sangat penting di fase ini.", "Cobalah untuk menurunkan suhu kamar menjadi lebih sejuk, hindari menatap layar *gadget* (blue light) setidaknya satu jam sebelum tidur, dan lakukan rutinitas relaksasi seperti membaca buku atau mendengarkan musik *lo-fi*. Mandi air hangat sebelum tidur juga sangat dianjurkan karena saat tubuh mendingin setelah mandi, otak akan menangkap sinyal bahwa sudah waktunya untuk tidur."] }
             ];
 
-            // --- ONBOARDING VIEW ---
-            if (showOnboarding) {
-                return (
-                <div className="min-h-screen bg-gradient-to-br from-pink-100 via-purple-50 to-pink-200 dark:from-slate-900 dark:via-slate-800 dark:to-slate-900 flex items-center justify-center p-4 font-sans text-slate-800 dark:text-slate-100">
-                    <div className="bg-white/80 dark:bg-slate-800/80 backdrop-blur-xl p-8 md:p-12 rounded-[3rem] shadow-2xl max-w-md w-full border border-white/50 dark:border-slate-700 animate-in zoom-in-95 duration-700">
-                    <div className="flex justify-center mb-6">
-                        <div className="w-20 h-20 bg-gradient-to-tr from-pink-400 to-purple-400 rounded-full flex items-center justify-center shadow-lg relative animate-bounce-short">
-                        <CalendarHeart size={40} className="text-white" />
-                        <Sparkles size={24} className="absolute -top-2 -right-2 text-yellow-300" />
-                        </div>
-                    </div>
-                    <h1 className="text-3xl font-black text-center mb-2">Halo, Sahabat <span className="text-pink-500">Baru!</span> 👋</h1>
-                    <p className="text-center text-slate-500 dark:text-slate-400 mb-8 text-sm">Selamat datang di SiklusKu. Yuk, kenalan sebentar agar aplikasinya bisa bantu menyesuaikan kebutuhan tubuhmu!</p>
-
-                    <form onSubmit={handleStartApp} className="space-y-6">
-                        <div className="space-y-2">
-                        <label className="text-sm font-bold text-slate-700 dark:text-slate-300 ml-2 flex items-center gap-2"><User size={16} className="text-pink-500" /> Nama Panggilanmu</label>
-                        <input type="text" required placeholder="Boleh nama pendek saja..." value={tempName} onChange={(e) => setTempName(e.target.value)} className="w-full bg-slate-50 dark:bg-slate-700/50 border border-slate-200 dark:border-slate-600 rounded-2xl p-4 focus:ring-4 focus:ring-pink-200 dark:focus:ring-pink-900 outline-none transition-all font-medium text-slate-800 dark:text-white" />
-                        </div>
-                        <div className="space-y-2">
-                        <label className="text-sm font-bold text-slate-700 dark:text-slate-300 ml-2 flex items-center gap-2"><Heart size={16} className="text-pink-500" /> Umur Kamu</label>
-                        <input type="number" required min="10" max="80" placeholder="Dalam angka (contoh: 22)" value={tempAge} onChange={(e) => setTempAge(e.target.value)} className="w-full bg-slate-50 dark:bg-slate-700/50 border border-slate-200 dark:border-slate-600 rounded-2xl p-4 focus:ring-4 focus:ring-pink-200 dark:focus:ring-pink-900 outline-none transition-all font-medium text-slate-800 dark:text-white" />
-                        </div>
-                        <button type="submit" className="w-full bg-gradient-to-r from-pink-500 to-purple-500 hover:from-pink-600 hover:to-purple-600 text-white font-bold text-lg py-4 rounded-2xl shadow-lg hover:shadow-xl transform hover:-translate-y-1 transition-all flex justify-center items-center gap-2">
-                        Mulai Jurnal Siklusku <ArrowRight size={20} />
-                        </button>
-                    </form>
-                    <p className="text-center text-xs text-slate-400 mt-6">Data kamu tersimpan aman secara lokal di perangkat ini.</p>
+            // --- AUTH / SETUP VIEWS ---
+            const ShellCard = ({ children, wide = false }) => (
+                <div className="min-h-screen bg-gradient-to-br from-pink-100 via-purple-50 to-pink-200 dark:from-slate-900 dark:via-slate-800 dark:to-slate-900 flex items-center justify-center p-4 font-sans text-slate-800 dark:text-slate-100 overflow-y-auto">
+                    <div className={`bg-white/85 dark:bg-slate-800/85 backdrop-blur-xl p-7 md:p-10 rounded-[2.5rem] shadow-2xl ${wide ? 'max-w-2xl' : 'max-w-md'} w-full border border-white/60 dark:border-slate-700 my-6`}>
+                        {children}
                     </div>
                 </div>
+            );
+
+            const BrandHeader = ({ title, subtitle }) => (
+                <>
+                    <div className="flex justify-center mb-5">
+                        <div className="w-20 h-20 bg-gradient-to-tr from-pink-400 to-purple-400 rounded-full flex items-center justify-center shadow-lg relative animate-bounce-short">
+                            <CalendarHeart size={40} className="text-white" />
+                            <Sparkles size={24} className="absolute -top-2 -right-2 text-yellow-300" />
+                        </div>
+                    </div>
+                    <h1 className="text-3xl font-black text-center mb-2">{title}</h1>
+                    <p className="text-center text-slate-500 dark:text-slate-400 mb-7 text-sm leading-relaxed">{subtitle}</p>
+                </>
+            );
+
+            const AlertBox = () => (
+                <>
+                    {authError && <div className="mb-5 p-4 rounded-2xl bg-red-50 dark:bg-red-900/20 border border-red-100 dark:border-red-900/30 text-red-600 dark:text-red-300 text-sm font-medium">{authError}</div>}
+                    {authMessage && <div className="mb-5 p-4 rounded-2xl bg-green-50 dark:bg-green-900/20 border border-green-100 dark:border-green-900/30 text-green-700 dark:text-green-300 text-sm font-medium">{authMessage}</div>}
+                </>
+            );
+
+            if (!SUPABASE_CONFIGURED) {
+                return (
+                    <ShellCard>
+                        <BrandHeader title={<span>Siklus<span className="text-pink-500">Ku</span> V2</span>} subtitle="Frontend sudah siap terhubung ke Supabase, tetapi konfigurasi project belum dimasukkan." />
+                        <div className="space-y-4">
+                            <div className="p-5 bg-amber-50 dark:bg-amber-900/20 rounded-2xl border border-amber-200 dark:border-amber-900/30">
+                                <p className="font-bold text-amber-700 dark:text-amber-300 mb-2">Supabase belum dikonfigurasi</p>
+                                <p className="text-sm text-slate-600 dark:text-slate-300 leading-relaxed">Buka bagian <code className="font-mono text-xs bg-white dark:bg-slate-700 px-2 py-1 rounded">SUPABASE CONFIGURATION</code> di file ini, lalu isi Project URL dan Publishable Key.</p>
+                            </div>
+                            <div className="p-5 bg-slate-50 dark:bg-slate-700/50 rounded-2xl text-sm text-slate-600 dark:text-slate-300 space-y-2">
+                                <p>1. Jalankan file SQL setup yang saya sertakan di SQL Editor Supabase.</p>
+                                <p>2. Salin Project URL.</p>
+                                <p>3. Salin <b>Publishable Key</b> yang diawali <code>sb_publishable_</code>.</p>
+                                <p>4. Jangan pernah memasukkan Secret Key atau service_role key ke HTML.</p>
+                            </div>
+                        </div>
+                    </ShellCard>
+                );
+            }
+
+            if (authLoading) {
+                return (
+                    <ShellCard>
+                        <BrandHeader title={<span>Siklus<span className="text-pink-500">Ku</span></span>} subtitle="Memulihkan sesi akun dan menyiapkan data kamu..." />
+                        <div className="flex justify-center"><div className="w-10 h-10 rounded-full border-4 border-pink-100 border-t-pink-500 animate-spin"></div></div>
+                    </ShellCard>
+                );
+            }
+
+            if (authMode === 'reset' && session) {
+                return (
+                    <ShellCard>
+                        <BrandHeader title="Buat Password Baru" subtitle="Masukkan password baru untuk akun SiklusKu kamu." />
+                        <AlertBox />
+                        <form onSubmit={handleUpdatePassword} className="space-y-5">
+                            <input type="password" minLength="6" required placeholder="Password baru" value={authPassword} onChange={(e) => setAuthPassword(e.target.value)} className="w-full bg-slate-50 dark:bg-slate-700/50 border border-slate-200 dark:border-slate-600 rounded-2xl p-4 focus:ring-4 focus:ring-pink-200 dark:focus:ring-pink-900 outline-none" />
+                            <button disabled={authBusy} className="w-full bg-gradient-to-r from-pink-500 to-purple-500 text-white font-bold py-4 rounded-2xl shadow-lg disabled:opacity-60">{authBusy ? 'Menyimpan...' : 'Simpan Password Baru'}</button>
+                        </form>
+                    </ShellCard>
+                );
+            }
+
+            if (!session) {
+                const isRegister = authMode === 'register';
+                return (
+                    <ShellCard>
+                        <BrandHeader
+                            title={<span>{isRegister ? 'Buat Akun' : 'Masuk ke'} <span className="text-pink-500">SiklusKu</span></span>}
+                            subtitle={isRegister ? 'Buat akun agar riwayat siklus tetap tersimpan walaupun cache browser terhapus atau kamu pindah perangkat.' : 'Masuk untuk memulihkan profil, pengaturan siklus, mood, dan hidrasi dari database.'}
+                        />
+                        <AlertBox />
+                        <form onSubmit={handleAuthSubmit} className="space-y-5">
+                            <div className="space-y-2">
+                                <label className="text-sm font-bold text-slate-700 dark:text-slate-300 ml-2">Email</label>
+                                <input type="email" autoComplete="email" required placeholder="nama@email.com" value={authEmail} onChange={(e) => setAuthEmail(e.target.value)} className="w-full bg-slate-50 dark:bg-slate-700/50 border border-slate-200 dark:border-slate-600 rounded-2xl p-4 focus:ring-4 focus:ring-pink-200 dark:focus:ring-pink-900 outline-none transition-all" />
+                            </div>
+                            <div className="space-y-2">
+                                <div className="flex justify-between items-center px-2">
+                                    <label className="text-sm font-bold text-slate-700 dark:text-slate-300">Password</label>
+                                    {!isRegister && <button type="button" onClick={handleForgotPassword} className="text-xs font-semibold text-pink-500 hover:text-pink-600">Lupa password?</button>}
+                                </div>
+                                <input type="password" autoComplete={isRegister ? 'new-password' : 'current-password'} minLength="6" required placeholder="Minimal 6 karakter" value={authPassword} onChange={(e) => setAuthPassword(e.target.value)} className="w-full bg-slate-50 dark:bg-slate-700/50 border border-slate-200 dark:border-slate-600 rounded-2xl p-4 focus:ring-4 focus:ring-pink-200 dark:focus:ring-pink-900 outline-none transition-all" />
+                            </div>
+                            <button type="submit" disabled={authBusy} className="w-full bg-gradient-to-r from-pink-500 to-purple-500 hover:from-pink-600 hover:to-purple-600 text-white font-bold text-lg py-4 rounded-2xl shadow-lg hover:shadow-xl transition-all flex justify-center items-center gap-2 disabled:opacity-60 disabled:cursor-not-allowed">
+                                {authBusy ? 'Memproses...' : isRegister ? 'Daftar Sekarang' : 'Masuk'} {!authBusy && <ArrowRight size={20} />}
+                            </button>
+                        </form>
+                        <div className="mt-6 text-center text-sm text-slate-500 dark:text-slate-400">
+                            {isRegister ? 'Sudah punya akun?' : 'Belum punya akun?'}{' '}
+                            <button onClick={() => { setAuthMode(isRegister ? 'login' : 'register'); setAuthError(''); setAuthMessage(''); }} className="font-bold text-pink-500 hover:text-pink-600">{isRegister ? 'Masuk' : 'Daftar gratis'}</button>
+                        </div>
+                        <p className="text-center text-[11px] leading-relaxed text-slate-400 mt-6">Data aplikasi disimpan per akun di Supabase dan dilindungi Row Level Security. Jangan gunakan SiklusKu sebagai alat diagnosis medis.</p>
+                    </ShellCard>
+                );
+            }
+
+            if (profileLoading || !profileReady) {
+                return (
+                    <ShellCard>
+                        <BrandHeader title="Sinkronisasi Akun" subtitle="Mengambil profil dan jurnal SiklusKu kamu dari database..." />
+                        <AlertBox />
+                        {!authError && <div className="flex justify-center"><div className="w-10 h-10 rounded-full border-4 border-pink-100 border-t-pink-500 animate-spin"></div></div>}
+                        {authError && <button onClick={() => window.location.reload()} className="w-full bg-slate-900 dark:bg-white dark:text-slate-900 text-white font-bold py-3 rounded-2xl">Muat Ulang</button>}
+                    </ShellCard>
+                );
+            }
+
+            if (showOnboarding) {
+                return (
+                    <ShellCard wide>
+                        <BrandHeader title={<span>Lengkapi <span className="text-pink-500">Profil</span></span>} subtitle="Sekali saja. Data ini akan dikaitkan ke akun kamu dan dipakai sebagai titik awal prediksi." />
+                        <AlertBox />
+                        <form onSubmit={handleStartApp} className="grid grid-cols-1 md:grid-cols-2 gap-5">
+                            <div className="space-y-2">
+                                <label className="text-sm font-bold text-slate-700 dark:text-slate-300 ml-2 flex items-center gap-2"><User size={16} className="text-pink-500" /> Nama Panggilan</label>
+                                <input type="text" required placeholder="Contoh: Aulia" value={tempName} onChange={(e) => setTempName(e.target.value)} className="w-full bg-slate-50 dark:bg-slate-700/50 border border-slate-200 dark:border-slate-600 rounded-2xl p-4 focus:ring-4 focus:ring-pink-200 dark:focus:ring-pink-900 outline-none" />
+                            </div>
+                            <div className="space-y-2">
+                                <label className="text-sm font-bold text-slate-700 dark:text-slate-300 ml-2 flex items-center gap-2"><Heart size={16} className="text-pink-500" /> Umur</label>
+                                <input type="number" required min="10" max="80" placeholder="Contoh: 22" value={tempAge} onChange={(e) => setTempAge(e.target.value)} className="w-full bg-slate-50 dark:bg-slate-700/50 border border-slate-200 dark:border-slate-600 rounded-2xl p-4 focus:ring-4 focus:ring-pink-200 dark:focus:ring-pink-900 outline-none" />
+                            </div>
+                            <div className="space-y-2 md:col-span-2">
+                                <label className="text-sm font-bold text-slate-700 dark:text-slate-300 ml-2 flex items-center gap-2"><CalendarHeart size={16} className="text-pink-500" /> Hari Pertama Haid Terakhir</label>
+                                <input type="date" required max={todayString} value={lastPeriodDate} onChange={(e) => setLastPeriodDate(e.target.value)} className="w-full bg-slate-50 dark:bg-slate-700/50 border border-slate-200 dark:border-slate-600 rounded-2xl p-4 focus:ring-4 focus:ring-pink-200 dark:focus:ring-pink-900 outline-none" />
+                            </div>
+                            <div className="space-y-3 p-4 bg-pink-50 dark:bg-slate-700/40 rounded-2xl">
+                                <label className="text-sm font-bold flex justify-between"><span>Rata-rata Siklus</span><span className="text-pink-500">{cycleLength} hari</span></label>
+                                <input type="range" min="21" max="35" value={cycleLength} onChange={(e) => setCycleLength(Number(e.target.value))} className="w-full accent-pink-500" />
+                            </div>
+                            <div className="space-y-3 p-4 bg-pink-50 dark:bg-slate-700/40 rounded-2xl">
+                                <label className="text-sm font-bold flex justify-between"><span>Lama Menstruasi</span><span className="text-pink-500">{periodLength} hari</span></label>
+                                <input type="range" min="3" max="10" value={periodLength} onChange={(e) => setPeriodLength(Number(e.target.value))} className="w-full accent-pink-500" />
+                            </div>
+                            <button type="submit" disabled={authBusy} className="md:col-span-2 w-full bg-gradient-to-r from-pink-500 to-purple-500 text-white font-bold text-lg py-4 rounded-2xl shadow-lg disabled:opacity-60 flex justify-center items-center gap-2">{authBusy ? 'Menyimpan...' : 'Simpan & Buka SiklusKu'} {!authBusy && <ArrowRight size={20} />}</button>
+                        </form>
+                        <button onClick={handleLogout} className="w-full mt-4 text-sm text-slate-400 hover:text-red-500">Keluar dari akun</button>
+                    </ShellCard>
                 );
             }
 
@@ -277,7 +725,7 @@
                 </div>
                 <div className="flex flex-wrap gap-2 justify-center">
                     {[...Array(currentTips.waterTarget)].map((_, i) => (
-                    <button key={i} onClick={() => setWaterGlasses(i + 1 === waterGlasses ? i : i + 1)} className={`p-2 rounded-2xl transition-all duration-300 transform active:scale-90 ${i < waterGlasses ? 'bg-blue-100 dark:bg-blue-900 text-blue-500 dark:text-blue-300 shadow-inner' : 'bg-slate-100 dark:bg-slate-700 text-slate-300 dark:text-slate-500 hover:bg-blue-50 dark:hover:bg-slate-600'}`}>
+                    <button key={i} onClick={() => updateWaterGlasses(i + 1 === waterGlasses ? i : i + 1)} className={`p-2 rounded-2xl transition-all duration-300 transform active:scale-90 ${i < waterGlasses ? 'bg-blue-100 dark:bg-blue-900 text-blue-500 dark:text-blue-300 shadow-inner' : 'bg-slate-100 dark:bg-slate-700 text-slate-300 dark:text-slate-500 hover:bg-blue-50 dark:hover:bg-slate-600'}`}>
                         <GlassWater size={28} className={i < waterGlasses ? 'animate-bounce-short' : ''} />
                     </button>
                     ))}
@@ -526,7 +974,7 @@
                         <h2 className="text-xs font-bold text-slate-400 dark:text-slate-500 uppercase tracking-wider">Pengaturan Siklus</h2>
                         <div className="space-y-2">
                         <label className="text-sm font-medium text-slate-600 dark:text-slate-300">Awal Haid Terakhir</label>
-                        <input type="date" value={lastPeriodDate} onChange={(e) => setLastPeriodDate(e.target.value)} className="w-full bg-pink-50 dark:bg-slate-700 border-none rounded-xl p-3 text-sm focus:ring-2 focus:ring-pink-400 outline-none text-slate-700 dark:text-slate-200 cursor-pointer" />
+                        <input type="date" max={todayString} value={lastPeriodDate} onChange={(e) => setLastPeriodDate(e.target.value)} className="w-full bg-pink-50 dark:bg-slate-700 border-none rounded-xl p-3 text-sm focus:ring-2 focus:ring-pink-400 outline-none text-slate-700 dark:text-slate-200 cursor-pointer" />
                         </div>
                         <div className="space-y-2">
                         <label className="text-sm font-medium text-slate-600 dark:text-slate-300 flex justify-between"><span>Siklus</span><span className="text-pink-500 font-bold">{cycleLength} Hari</span></label>
@@ -564,7 +1012,7 @@
 
                     <div className="p-6 mt-auto">
                     <button onClick={handleLogout} className="w-full flex items-center justify-center gap-2 text-red-500 bg-red-50 hover:bg-red-100 dark:bg-red-900/20 dark:hover:bg-red-900/40 py-3 rounded-2xl font-bold transition-colors">
-                        <LogOut size={18} /> Keluar & Ubah Profil
+                        <LogOut size={18} /> Keluar dari Akun
                     </button>
                     </div>
                 </aside>
@@ -576,6 +1024,10 @@
                         <h1 className="text-xl font-black text-slate-800 dark:text-white capitalize hidden sm:block">{activeTab === 'beranda' ? 'Dashboard' : activeTab}</h1>
                     </div>
                     <div className="flex items-center gap-4">
+                        <div className={`hidden md:flex items-center gap-2 px-3 py-1.5 rounded-full text-xs font-bold ${syncState === 'error' ? 'bg-red-50 dark:bg-red-900/20 text-red-500' : syncState === 'syncing' ? 'bg-amber-50 dark:bg-amber-900/20 text-amber-500' : 'bg-green-50 dark:bg-green-900/20 text-green-600 dark:text-green-400'}`} title="Status sinkronisasi Supabase">
+                            <span className={`w-2 h-2 rounded-full ${syncState === 'error' ? 'bg-red-500' : syncState === 'syncing' ? 'bg-amber-400 animate-pulse' : 'bg-green-500'}`}></span>
+                            {syncState === 'error' ? 'Gagal Sinkron' : syncState === 'syncing' ? 'Menyimpan...' : 'Tersimpan'}
+                        </div>
                         <button onClick={() => setIsDarkMode(!isDarkMode)} className="p-2.5 bg-pink-50 dark:bg-slate-800 text-pink-500 dark:text-amber-300 rounded-full hover:scale-110 transition-transform shadow-sm">
                         {isDarkMode ? <Sun size={20} /> : <Moon size={20} />}
                         </button>
