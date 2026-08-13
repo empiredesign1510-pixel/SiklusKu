@@ -2,7 +2,7 @@
 <html lang="id">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover, interactive-widget=resizes-content">
     <title>SiklusKu - Catatan Siklus Haid</title>
     
     <!-- Warna Tema PWA / Mobile -->
@@ -39,7 +39,42 @@
         ::-webkit-scrollbar-track { background: transparent; }
         ::-webkit-scrollbar-thumb { background: #fbcfe8; border-radius: 10px; }
         .dark ::-webkit-scrollbar-thumb { background: #475569; }
-        body { -webkit-tap-highlight-color: transparent; }
+        html, body, #root { width: 100%; min-height: 100%; }
+        body {
+            -webkit-tap-highlight-color: transparent;
+            overflow-x: hidden;
+            overflow-y: auto;
+        }
+
+        /* Mobile keyboard-safe auth layout */
+        .auth-shell {
+            min-height: 100dvh;
+            min-height: var(--visual-viewport-height, 100dvh);
+            height: var(--visual-viewport-height, auto);
+            overflow-y: auto;
+            overflow-x: hidden;
+            -webkit-overflow-scrolling: touch;
+            overscroll-behavior-y: contain;
+            align-items: flex-start;
+            padding-top: max(16px, env(safe-area-inset-top));
+            padding-bottom: max(24px, env(safe-area-inset-bottom));
+        }
+
+        .auth-card {
+            margin-top: 8px;
+            margin-bottom: 24px;
+        }
+
+        .auth-input {
+            font-size: 16px;
+            scroll-margin-top: 24px;
+            scroll-margin-bottom: 180px;
+        }
+
+        @media (min-width: 640px) {
+            .auth-shell { align-items: center; }
+            .auth-card { margin-top: 24px; margin-bottom: 24px; }
+        }
         .instagram-link {
     display: flex;
     align-items: center;
@@ -56,13 +91,32 @@
 
     </style>
 </head>
-<body class="bg-pink-50 dark:bg-slate-900 overflow-hidden text-slate-800 dark:text-slate-100">
+<body class="bg-pink-50 dark:bg-slate-900 text-slate-800 dark:text-slate-100">
     
     <!-- Tempat Aplikasi Berjalan -->
     <div id="root"></div>
 
     <script type="text/babel">
         const { useState, useEffect, useMemo } = React;
+
+        // Sinkronkan tinggi halaman dengan area yang benar-benar terlihat saat keyboard HP terbuka.
+        const syncVisualViewportHeight = () => {
+            const height = window.visualViewport ? window.visualViewport.height : window.innerHeight;
+            document.documentElement.style.setProperty('--visual-viewport-height', `${Math.round(height)}px`);
+        };
+        syncVisualViewportHeight();
+        window.addEventListener('resize', syncVisualViewportHeight);
+        if (window.visualViewport) {
+            window.visualViewport.addEventListener('resize', syncVisualViewportHeight);
+            window.visualViewport.addEventListener('scroll', syncVisualViewportHeight);
+        }
+
+        const keepFocusedFieldVisible = (event) => {
+            const element = event.currentTarget;
+            window.setTimeout(() => {
+                element.scrollIntoView({ behavior: 'smooth', block: 'center', inline: 'nearest' });
+            }, 180);
+        };
 
         // ==========================================
         // FIREBASE CONFIGURATION
@@ -555,8 +609,8 @@
 
             // --- AUTH / SETUP VIEWS ---
             const ShellCard = ({ children, wide = false }) => (
-                <div className="min-h-screen bg-gradient-to-br from-pink-100 via-purple-50 to-pink-200 dark:from-slate-900 dark:via-slate-800 dark:to-slate-900 flex items-center justify-center p-4 font-sans text-slate-800 dark:text-slate-100 overflow-y-auto">
-                    <div className={`bg-white/85 dark:bg-slate-800/85 backdrop-blur-xl p-7 md:p-10 rounded-[2.5rem] shadow-2xl ${wide ? 'max-w-2xl' : 'max-w-md'} w-full border border-white/60 dark:border-slate-700 my-6`}>
+                <div className="auth-shell bg-gradient-to-br from-pink-100 via-purple-50 to-pink-200 dark:from-slate-900 dark:via-slate-800 dark:to-slate-900 flex justify-center p-4 font-sans text-slate-800 dark:text-slate-100">
+                    <div className={`auth-card bg-white/85 dark:bg-slate-800/85 backdrop-blur-xl p-7 md:p-10 rounded-[2.5rem] shadow-2xl ${wide ? 'max-w-2xl' : 'max-w-md'} w-full border border-white/60 dark:border-slate-700`}>
                         {children}
                     </div>
                 </div>
@@ -624,14 +678,14 @@
                         <form onSubmit={handleAuthSubmit} className="space-y-5">
                             <div className="space-y-2">
                                 <label className="text-sm font-bold text-slate-700 dark:text-slate-300 ml-2">Email</label>
-                                <input type="email" autoComplete="email" required placeholder="nama@email.com" value={authEmail} onChange={(e) => setAuthEmail(e.target.value)} className="w-full bg-slate-50 dark:bg-slate-700/50 border border-slate-200 dark:border-slate-600 rounded-2xl p-4 focus:ring-4 focus:ring-pink-200 dark:focus:ring-pink-900 outline-none transition-all" />
+                                <input type="email" autoComplete="email" inputMode="email" required placeholder="nama@email.com" value={authEmail} onChange={(e) => setAuthEmail(e.target.value)} onFocus={keepFocusedFieldVisible} className="auth-input w-full bg-slate-50 dark:bg-slate-700/50 border border-slate-200 dark:border-slate-600 rounded-2xl p-4 focus:ring-4 focus:ring-pink-200 dark:focus:ring-pink-900 outline-none transition-all" />
                             </div>
                             <div className="space-y-2">
                                 <div className="flex justify-between items-center px-2">
                                     <label className="text-sm font-bold text-slate-700 dark:text-slate-300">Password</label>
                                     {!isRegister && <button type="button" onClick={handleForgotPassword} className="text-xs font-semibold text-pink-500 hover:text-pink-600">Lupa password?</button>}
                                 </div>
-                                <input type="password" autoComplete={isRegister ? 'new-password' : 'current-password'} minLength="6" required placeholder="Minimal 6 karakter" value={authPassword} onChange={(e) => setAuthPassword(e.target.value)} className="w-full bg-slate-50 dark:bg-slate-700/50 border border-slate-200 dark:border-slate-600 rounded-2xl p-4 focus:ring-4 focus:ring-pink-200 dark:focus:ring-pink-900 outline-none transition-all" />
+                                <input type="password" autoComplete={isRegister ? 'new-password' : 'current-password'} minLength="6" required placeholder="Minimal 6 karakter" value={authPassword} onChange={(e) => setAuthPassword(e.target.value)} onFocus={keepFocusedFieldVisible} className="auth-input w-full bg-slate-50 dark:bg-slate-700/50 border border-slate-200 dark:border-slate-600 rounded-2xl p-4 focus:ring-4 focus:ring-pink-200 dark:focus:ring-pink-900 outline-none transition-all" />
                             </div>
                             <button type="submit" disabled={authBusy} className="w-full bg-gradient-to-r from-pink-500 to-purple-500 hover:from-pink-600 hover:to-purple-600 text-white font-bold text-lg py-4 rounded-2xl shadow-lg hover:shadow-xl transition-all flex justify-center items-center gap-2 disabled:opacity-60 disabled:cursor-not-allowed">
                                 {authBusy ? 'Memproses...' : isRegister ? 'Daftar Sekarang' : 'Masuk'} {!authBusy && <ArrowRight size={20} />}
@@ -665,11 +719,11 @@
                         <form onSubmit={handleStartApp} className="grid grid-cols-1 md:grid-cols-2 gap-5">
                             <div className="space-y-2">
                                 <label className="text-sm font-bold text-slate-700 dark:text-slate-300 ml-2 flex items-center gap-2"><User size={16} className="text-pink-500" /> Nama Panggilan</label>
-                                <input type="text" required placeholder="Contoh: Aulia" value={tempName} onChange={(e) => setTempName(e.target.value)} className="w-full bg-slate-50 dark:bg-slate-700/50 border border-slate-200 dark:border-slate-600 rounded-2xl p-4 focus:ring-4 focus:ring-pink-200 dark:focus:ring-pink-900 outline-none" />
+                                <input type="text" required placeholder="Contoh: Aulia" value={tempName} onChange={(e) => setTempName(e.target.value)} onFocus={keepFocusedFieldVisible} className="auth-input w-full bg-slate-50 dark:bg-slate-700/50 border border-slate-200 dark:border-slate-600 rounded-2xl p-4 focus:ring-4 focus:ring-pink-200 dark:focus:ring-pink-900 outline-none" />
                             </div>
                             <div className="space-y-2">
                                 <label className="text-sm font-bold text-slate-700 dark:text-slate-300 ml-2 flex items-center gap-2"><Heart size={16} className="text-pink-500" /> Umur</label>
-                                <input type="number" required min="10" max="80" placeholder="Contoh: 22" value={tempAge} onChange={(e) => setTempAge(e.target.value)} className="w-full bg-slate-50 dark:bg-slate-700/50 border border-slate-200 dark:border-slate-600 rounded-2xl p-4 focus:ring-4 focus:ring-pink-200 dark:focus:ring-pink-900 outline-none" />
+                                <input type="number" inputMode="numeric" required min="10" max="80" placeholder="Contoh: 22" value={tempAge} onChange={(e) => setTempAge(e.target.value)} onFocus={keepFocusedFieldVisible} className="auth-input w-full bg-slate-50 dark:bg-slate-700/50 border border-slate-200 dark:border-slate-600 rounded-2xl p-4 focus:ring-4 focus:ring-pink-200 dark:focus:ring-pink-900 outline-none" />
                             </div>
                             <div className="space-y-2 md:col-span-2">
                                 <label className="text-sm font-bold text-slate-700 dark:text-slate-300 ml-2 flex items-center gap-2"><CalendarHeart size={16} className="text-pink-500" /> Hari Pertama Haid Terakhir</label>
