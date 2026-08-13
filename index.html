@@ -2,7 +2,7 @@
 <html lang="id">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover, interactive-widget=resizes-content">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
     <title>SiklusKu - Catatan Siklus Haid</title>
     
     <!-- Warna Tema PWA / Mobile -->
@@ -48,9 +48,9 @@
 
         /* Mobile keyboard-safe auth layout */
         .auth-shell {
+            min-height: 100vh;
             min-height: 100dvh;
-            min-height: var(--visual-viewport-height, 100dvh);
-            height: var(--visual-viewport-height, auto);
+            height: auto;
             overflow-y: auto;
             overflow-x: hidden;
             -webkit-overflow-scrolling: touch;
@@ -99,24 +99,7 @@
     <script type="text/babel">
         const { useState, useEffect, useMemo } = React;
 
-        // Sinkronkan tinggi halaman dengan area yang benar-benar terlihat saat keyboard HP terbuka.
-        const syncVisualViewportHeight = () => {
-            const height = window.visualViewport ? window.visualViewport.height : window.innerHeight;
-            document.documentElement.style.setProperty('--visual-viewport-height', `${Math.round(height)}px`);
-        };
-        syncVisualViewportHeight();
-        window.addEventListener('resize', syncVisualViewportHeight);
-        if (window.visualViewport) {
-            window.visualViewport.addEventListener('resize', syncVisualViewportHeight);
-            window.visualViewport.addEventListener('scroll', syncVisualViewportHeight);
-        }
-
-        const keepFocusedFieldVisible = (event) => {
-            const element = event.currentTarget;
-            window.setTimeout(() => {
-                element.scrollIntoView({ behavior: 'smooth', block: 'center', inline: 'nearest' });
-            }, 180);
-        };
+        // Keyboard mobile ditangani oleh CSS dynamic viewport.
 
         // ==========================================
         // FIREBASE CONFIGURATION
@@ -208,7 +191,38 @@
                 <path d="M12 2C8 2 4 8 4 14C4 18.4183 7.58172 22 12 22C16.4183 22 20 18.4183 20 14C20 8 16 2 12 2Z" />
             </svg>
         );
-         // ==========================================
+         // Komponen auth harus didefinisikan di luar App.
+        // Jika didefinisikan di dalam App, React membuat tipe komponen baru pada setiap
+        // keystroke, lalu me-remount subtree dan input kehilangan fokus.
+        const ShellCard = ({ children, wide = false }) => (
+            <div className="auth-shell bg-gradient-to-br from-pink-100 via-purple-50 to-pink-200 dark:from-slate-900 dark:via-slate-800 dark:to-slate-900 flex justify-center p-4 font-sans text-slate-800 dark:text-slate-100">
+                <div className={`auth-card bg-white/85 dark:bg-slate-800/85 backdrop-blur-xl p-7 md:p-10 rounded-[2.5rem] shadow-2xl ${wide ? 'max-w-2xl' : 'max-w-md'} w-full border border-white/60 dark:border-slate-700`}>
+                    {children}
+                </div>
+            </div>
+        );
+
+        const BrandHeader = ({ title, subtitle }) => (
+            <>
+                <div className="flex justify-center mb-5">
+                    <div className="w-20 h-20 bg-gradient-to-tr from-pink-400 to-purple-400 rounded-full flex items-center justify-center shadow-lg relative animate-bounce-short">
+                        <CalendarHeart size={40} className="text-white" />
+                        <Sparkles size={24} className="absolute -top-2 -right-2 text-yellow-300" />
+                    </div>
+                </div>
+                <h1 className="text-3xl font-black text-center mb-2">{title}</h1>
+                <p className="text-center text-slate-500 dark:text-slate-400 mb-7 text-sm leading-relaxed">{subtitle}</p>
+            </>
+        );
+
+        const AlertBox = ({ error, message }) => (
+            <>
+                {error && <div className="mb-5 p-4 rounded-2xl bg-red-50 dark:bg-red-900/20 border border-red-100 dark:border-red-900/30 text-red-600 dark:text-red-300 text-sm font-medium">{error}</div>}
+                {message && <div className="mb-5 p-4 rounded-2xl bg-green-50 dark:bg-green-900/20 border border-green-100 dark:border-green-900/30 text-green-700 dark:text-green-300 text-sm font-medium">{message}</div>}
+            </>
+        );
+
+        // ==========================================
         // 2. APLIKASI UTAMA (REACT COMPONENT)
         // ==========================================
         const App = () => {
@@ -608,34 +622,6 @@
             ];
 
             // --- AUTH / SETUP VIEWS ---
-            const ShellCard = ({ children, wide = false }) => (
-                <div className="auth-shell bg-gradient-to-br from-pink-100 via-purple-50 to-pink-200 dark:from-slate-900 dark:via-slate-800 dark:to-slate-900 flex justify-center p-4 font-sans text-slate-800 dark:text-slate-100">
-                    <div className={`auth-card bg-white/85 dark:bg-slate-800/85 backdrop-blur-xl p-7 md:p-10 rounded-[2.5rem] shadow-2xl ${wide ? 'max-w-2xl' : 'max-w-md'} w-full border border-white/60 dark:border-slate-700`}>
-                        {children}
-                    </div>
-                </div>
-            );
-
-            const BrandHeader = ({ title, subtitle }) => (
-                <>
-                    <div className="flex justify-center mb-5">
-                        <div className="w-20 h-20 bg-gradient-to-tr from-pink-400 to-purple-400 rounded-full flex items-center justify-center shadow-lg relative animate-bounce-short">
-                            <CalendarHeart size={40} className="text-white" />
-                            <Sparkles size={24} className="absolute -top-2 -right-2 text-yellow-300" />
-                        </div>
-                    </div>
-                    <h1 className="text-3xl font-black text-center mb-2">{title}</h1>
-                    <p className="text-center text-slate-500 dark:text-slate-400 mb-7 text-sm leading-relaxed">{subtitle}</p>
-                </>
-            );
-
-            const AlertBox = () => (
-                <>
-                    {authError && <div className="mb-5 p-4 rounded-2xl bg-red-50 dark:bg-red-900/20 border border-red-100 dark:border-red-900/30 text-red-600 dark:text-red-300 text-sm font-medium">{authError}</div>}
-                    {authMessage && <div className="mb-5 p-4 rounded-2xl bg-green-50 dark:bg-green-900/20 border border-green-100 dark:border-green-900/30 text-green-700 dark:text-green-300 text-sm font-medium">{authMessage}</div>}
-                </>
-            );
-
             if (!FIREBASE_CONFIGURED) {
                 return (
                     <ShellCard>
@@ -674,18 +660,18 @@
                             title={<span>{isRegister ? 'Buat Akun' : 'Masuk ke'} <span className="text-pink-500">SiklusKu</span></span>}
                             subtitle={isRegister ? 'Buat akun agar riwayat siklus tetap tersimpan walaupun cache browser terhapus atau kamu pindah perangkat.' : 'Masuk untuk memulihkan profil, pengaturan siklus, mood, dan hidrasi dari database.'}
                         />
-                        <AlertBox />
+                        <AlertBox error={authError} message={authMessage} />
                         <form onSubmit={handleAuthSubmit} className="space-y-5">
                             <div className="space-y-2">
                                 <label className="text-sm font-bold text-slate-700 dark:text-slate-300 ml-2">Email</label>
-                                <input type="email" autoComplete="email" inputMode="email" required placeholder="nama@email.com" value={authEmail} onChange={(e) => setAuthEmail(e.target.value)} onFocus={keepFocusedFieldVisible} className="auth-input w-full bg-slate-50 dark:bg-slate-700/50 border border-slate-200 dark:border-slate-600 rounded-2xl p-4 focus:ring-4 focus:ring-pink-200 dark:focus:ring-pink-900 outline-none transition-all" />
+                                <input type="email" autoComplete="email" inputMode="email" required placeholder="nama@email.com" value={authEmail} onChange={(e) => setAuthEmail(e.target.value)} className="auth-input w-full bg-slate-50 dark:bg-slate-700/50 border border-slate-200 dark:border-slate-600 rounded-2xl p-4 focus:ring-4 focus:ring-pink-200 dark:focus:ring-pink-900 outline-none transition-all" />
                             </div>
                             <div className="space-y-2">
                                 <div className="flex justify-between items-center px-2">
                                     <label className="text-sm font-bold text-slate-700 dark:text-slate-300">Password</label>
                                     {!isRegister && <button type="button" onClick={handleForgotPassword} className="text-xs font-semibold text-pink-500 hover:text-pink-600">Lupa password?</button>}
                                 </div>
-                                <input type="password" autoComplete={isRegister ? 'new-password' : 'current-password'} minLength="6" required placeholder="Minimal 6 karakter" value={authPassword} onChange={(e) => setAuthPassword(e.target.value)} onFocus={keepFocusedFieldVisible} className="auth-input w-full bg-slate-50 dark:bg-slate-700/50 border border-slate-200 dark:border-slate-600 rounded-2xl p-4 focus:ring-4 focus:ring-pink-200 dark:focus:ring-pink-900 outline-none transition-all" />
+                                <input type="password" autoComplete={isRegister ? 'new-password' : 'current-password'} minLength="6" required placeholder="Minimal 6 karakter" value={authPassword} onChange={(e) => setAuthPassword(e.target.value)} className="auth-input w-full bg-slate-50 dark:bg-slate-700/50 border border-slate-200 dark:border-slate-600 rounded-2xl p-4 focus:ring-4 focus:ring-pink-200 dark:focus:ring-pink-900 outline-none transition-all" />
                             </div>
                             <button type="submit" disabled={authBusy} className="w-full bg-gradient-to-r from-pink-500 to-purple-500 hover:from-pink-600 hover:to-purple-600 text-white font-bold text-lg py-4 rounded-2xl shadow-lg hover:shadow-xl transition-all flex justify-center items-center gap-2 disabled:opacity-60 disabled:cursor-not-allowed">
                                 {authBusy ? 'Memproses...' : isRegister ? 'Daftar Sekarang' : 'Masuk'} {!authBusy && <ArrowRight size={20} />}
@@ -704,7 +690,7 @@
                 return (
                     <ShellCard>
                         <BrandHeader title="Sinkronisasi Akun" subtitle="Mengambil profil dan jurnal SiklusKu kamu dari Cloud Firestore..." />
-                        <AlertBox />
+                        <AlertBox error={authError} message={authMessage} />
                         {!authError && <div className="flex justify-center"><div className="w-10 h-10 rounded-full border-4 border-pink-100 border-t-pink-500 animate-spin"></div></div>}
                         {authError && <button onClick={() => window.location.reload()} className="w-full bg-slate-900 dark:bg-white dark:text-slate-900 text-white font-bold py-3 rounded-2xl">Muat Ulang</button>}
                     </ShellCard>
@@ -715,15 +701,15 @@
                 return (
                     <ShellCard wide>
                         <BrandHeader title={<span>Lengkapi <span className="text-pink-500">Profil</span></span>} subtitle="Sekali saja. Data ini akan dikaitkan ke akun kamu dan dipakai sebagai titik awal prediksi." />
-                        <AlertBox />
+                        <AlertBox error={authError} message={authMessage} />
                         <form onSubmit={handleStartApp} className="grid grid-cols-1 md:grid-cols-2 gap-5">
                             <div className="space-y-2">
                                 <label className="text-sm font-bold text-slate-700 dark:text-slate-300 ml-2 flex items-center gap-2"><User size={16} className="text-pink-500" /> Nama Panggilan</label>
-                                <input type="text" required placeholder="Contoh: Aulia" value={tempName} onChange={(e) => setTempName(e.target.value)} onFocus={keepFocusedFieldVisible} className="auth-input w-full bg-slate-50 dark:bg-slate-700/50 border border-slate-200 dark:border-slate-600 rounded-2xl p-4 focus:ring-4 focus:ring-pink-200 dark:focus:ring-pink-900 outline-none" />
+                                <input type="text" required placeholder="Contoh: Aulia" value={tempName} onChange={(e) => setTempName(e.target.value)} className="auth-input w-full bg-slate-50 dark:bg-slate-700/50 border border-slate-200 dark:border-slate-600 rounded-2xl p-4 focus:ring-4 focus:ring-pink-200 dark:focus:ring-pink-900 outline-none" />
                             </div>
                             <div className="space-y-2">
                                 <label className="text-sm font-bold text-slate-700 dark:text-slate-300 ml-2 flex items-center gap-2"><Heart size={16} className="text-pink-500" /> Umur</label>
-                                <input type="number" inputMode="numeric" required min="10" max="80" placeholder="Contoh: 22" value={tempAge} onChange={(e) => setTempAge(e.target.value)} onFocus={keepFocusedFieldVisible} className="auth-input w-full bg-slate-50 dark:bg-slate-700/50 border border-slate-200 dark:border-slate-600 rounded-2xl p-4 focus:ring-4 focus:ring-pink-200 dark:focus:ring-pink-900 outline-none" />
+                                <input type="number" inputMode="numeric" required min="10" max="80" placeholder="Contoh: 22" value={tempAge} onChange={(e) => setTempAge(e.target.value)} className="auth-input w-full bg-slate-50 dark:bg-slate-700/50 border border-slate-200 dark:border-slate-600 rounded-2xl p-4 focus:ring-4 focus:ring-pink-200 dark:focus:ring-pink-900 outline-none" />
                             </div>
                             <div className="space-y-2 md:col-span-2">
                                 <label className="text-sm font-bold text-slate-700 dark:text-slate-300 ml-2 flex items-center gap-2"><CalendarHeart size={16} className="text-pink-500" /> Hari Pertama Haid Terakhir</label>
