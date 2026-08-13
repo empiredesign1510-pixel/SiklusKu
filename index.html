@@ -2,7 +2,7 @@
 <html lang="id">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover, interactive-widget=resizes-content">
     <title>SiklusKu - Catatan Siklus Haid</title>
     
     <!-- Warna Tema PWA / Mobile -->
@@ -39,36 +39,59 @@
         ::-webkit-scrollbar-track { background: transparent; }
         ::-webkit-scrollbar-thumb { background: #fbcfe8; border-radius: 10px; }
         .dark ::-webkit-scrollbar-thumb { background: #475569; }
-        html, body, #root { width: 100%; min-height: 100%; }
+        html, body {
+            width: 100%;
+            height: 100%;
+            margin: 0;
+        }
+        #root {
+            width: 100%;
+            height: 100%;
+            min-height: 0;
+        }
         body {
             -webkit-tap-highlight-color: transparent;
-            overflow-x: hidden;
-            overflow-y: auto;
+            overflow: hidden;
         }
 
-        /* Mobile keyboard-safe auth layout */
+        /*
+         * Auth/onboarding is its own viewport-height scroll container.
+         * The previous version used height:auto, so the element expanded with its
+         * content instead of becoming scrollable on some Android Chrome layouts.
+         */
         .auth-shell {
-            min-height: 100vh;
-            min-height: 100dvh;
-            height: auto;
-            overflow-y: auto;
+            width: 100%;
+            height: 100vh;
+            height: 100dvh;
+            min-height: 0;
             overflow-x: hidden;
+            overflow-y: auto !important;
             -webkit-overflow-scrolling: touch;
-            overscroll-behavior-y: contain;
+            touch-action: pan-y;
+            overscroll-behavior-y: auto;
             align-items: flex-start;
+            box-sizing: border-box;
             padding-top: max(16px, env(safe-area-inset-top));
-            padding-bottom: max(24px, env(safe-area-inset-bottom));
+            padding-bottom: max(48px, env(safe-area-inset-bottom));
         }
 
         .auth-card {
+            flex: 0 0 auto;
             margin-top: 8px;
-            margin-bottom: 24px;
+            margin-bottom: 32px;
+        }
+
+        .auth-input,
+        .auth-shell input,
+        .auth-shell button,
+        .auth-shell select {
+            touch-action: manipulation;
         }
 
         .auth-input {
             font-size: 16px;
             scroll-margin-top: 24px;
-            scroll-margin-bottom: 180px;
+            scroll-margin-bottom: 35dvh;
         }
 
         @media (min-width: 640px) {
