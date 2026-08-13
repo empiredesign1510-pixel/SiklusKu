@@ -1,742 +1,1031 @@
-<!doctype html>
+<!DOCTYPE html>
 <html lang="id">
 <head>
-  <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover" />
-  <meta name="theme-color" content="#ec4899" />
-  <meta name="description" content="SiklusKu — pencatat siklus menstruasi pribadi dengan sinkronisasi akun." />
-  <title>SiklusKu</title>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>SiklusKu - Catatan Siklus Haid</title>
+    
+    <!-- Warna Tema PWA / Mobile -->
+    <meta name="theme-color" content="#ec4899">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 
-  <link rel="preconnect" href="https://cdn.jsdelivr.net" crossorigin>
-  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <!-- Tailwind CSS CDN -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        tailwind.config = {
+            darkMode: 'class',
+            theme: {
+                extend: {
+                    animation: { 'bounce-short': 'bounce-short 1s ease-in-out infinite' },
+                    keyframes: { 'bounce-short': { '0%, 100%': { transform: 'translateY(0)' }, '50%': { transform: 'translateY(-15%)' } } }
+                }
+            }
+        }
+    </script>
 
-  <style>
-    :root{
-      --bg:#fff8fb;--panel:#ffffff;--panel2:#fff1f7;--text:#20202a;--muted:#767684;
-      --pink:#ec4899;--pink2:#f472b6;--purple:#a855f7;--line:#f1dce6;
-      --green:#16a34a;--amber:#d97706;--red:#dc2626;--shadow:0 18px 50px rgba(80,20,55,.10)
-    }
-    *{box-sizing:border-box} html{scroll-behavior:smooth}
-    body{margin:0;font-family:Inter,ui-sans-serif,system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;background:linear-gradient(145deg,#fff8fb,#faf7ff);color:var(--text)}
-    button,input,textarea,select{font:inherit} button{cursor:pointer}
-    .hidden{display:none!important}.screen{min-height:100vh}.center{display:grid;place-items:center;padding:24px}
-    .auth-card{width:min(460px,100%);background:rgba(255,255,255,.92);backdrop-filter:blur(18px);border:1px solid rgba(255,255,255,.9);box-shadow:var(--shadow);border-radius:32px;padding:30px}
-    .brand{display:flex;align-items:center;gap:12px;font-weight:900;font-size:26px}.logo{width:48px;height:48px;border-radius:16px;background:linear-gradient(135deg,var(--pink),var(--purple));display:grid;place-items:center;color:white;box-shadow:0 10px 25px rgba(236,72,153,.28)}
-    .sub{color:var(--muted);line-height:1.55}.title{font-size:28px;margin:22px 0 8px}.label{display:block;font-weight:700;font-size:13px;margin:14px 0 7px}
-    .input,.select,.textarea{width:100%;border:1px solid var(--line);background:#fff;border-radius:16px;padding:14px 15px;outline:none;transition:.2s}
-    .input:focus,.select:focus,.textarea:focus{border-color:#f9a8d4;box-shadow:0 0 0 4px #fce7f3}.textarea{min-height:100px;resize:vertical}
-    .btn{border:0;border-radius:16px;padding:13px 16px;font-weight:800;transition:.18s}.btn:active{transform:scale(.98)}
-    .btn-primary{color:white;background:linear-gradient(135deg,var(--pink),var(--purple));box-shadow:0 10px 24px rgba(236,72,153,.22)}
-    .btn-soft{color:#be185d;background:#fce7f3}.btn-ghost{background:transparent;color:var(--muted);border:1px solid var(--line)}.btn-danger{background:#fee2e2;color:#b91c1c}
-    .btn:disabled{opacity:.55;cursor:not-allowed}.full{width:100%}.row{display:flex;gap:10px;align-items:center}.between{justify-content:space-between}.wrap{flex-wrap:wrap}
-    .notice{padding:12px 14px;border-radius:14px;font-size:13px;line-height:1.45;margin:14px 0}.notice.err{background:#fff1f2;color:#be123c;border:1px solid #fecdd3}.notice.ok{background:#f0fdf4;color:#15803d;border:1px solid #bbf7d0}.notice.info{background:#fdf2f8;color:#be185d;border:1px solid #fbcfe8}
+    <!-- Standalone React & Babel CDN -->
+    <script src="https://unpkg.com/react@18/umd/react.production.min.js" crossorigin></script>
+    <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js" crossorigin></script>
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+    <!-- Firebase JS SDK - compat dipakai agar tetap cocok dengan arsitektur single-file React/Babel -->
+    <script src="https://www.gstatic.com/firebasejs/12.17.1/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/12.17.1/firebase-auth-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/12.17.1/firebase-firestore-compat.js"></script>
 
-    .app-shell{display:grid;grid-template-columns:250px minmax(0,1fr);min-height:100vh}
-    .sidebar{position:sticky;top:0;height:100vh;padding:24px 18px;border-right:1px solid var(--line);background:rgba(255,255,255,.86);backdrop-filter:blur(18px);display:flex;flex-direction:column}
-    .nav{display:grid;gap:7px;margin-top:28px}.nav button{border:0;background:transparent;text-align:left;padding:13px 14px;border-radius:14px;font-weight:750;color:#6b6470}
-    .nav button.active{background:#fce7f3;color:#be185d}.nav button:hover{background:#fff1f7}
-    .sidebar-foot{margin-top:auto}.small{font-size:12px;color:var(--muted)}
-    main{min-width:0}.topbar{height:76px;padding:0 28px;display:flex;align-items:center;justify-content:space-between;border-bottom:1px solid var(--line);background:rgba(255,248,251,.82);backdrop-filter:blur(18px);position:sticky;top:0;z-index:20}
-    .main-content{padding:28px;max-width:1220px;margin:0 auto}.page-title{font-size:28px;margin:0}.grid{display:grid;gap:18px}.g3{grid-template-columns:repeat(3,1fr)}.g2{grid-template-columns:repeat(2,1fr)}
-    .card{background:var(--panel);border:1px solid var(--line);border-radius:24px;padding:20px;box-shadow:0 10px 35px rgba(67,25,50,.05)}.card h3{margin:0 0 8px}.metric{font-size:36px;font-weight:900;letter-spacing:-1px}.muted{color:var(--muted)}
-    .hero{background:linear-gradient(135deg,#ec4899,#c026d3);color:white;border:0;overflow:hidden;position:relative}.hero .muted{color:#fde7f4}.hero:after{content:"";position:absolute;width:220px;height:220px;border-radius:50%;background:rgba(255,255,255,.10);right:-70px;top:-90px}
-    .pill{display:inline-flex;align-items:center;gap:7px;padding:7px 10px;border-radius:999px;background:#f8fafc;font-size:12px;font-weight:800}.pill.good{background:#ecfdf5;color:#15803d}.pill.wait{background:#fffbeb;color:#b45309}.pill.bad{background:#fef2f2;color:#b91c1c}
-    .moods{display:grid;grid-template-columns:repeat(5,1fr);gap:9px}.mood{border:1px solid var(--line);background:white;border-radius:17px;padding:12px 6px;text-align:center}.mood.active{border-color:#f472b6;background:#fdf2f8}.mood .emoji{font-size:25px;display:block}
-    .water{display:grid;grid-template-columns:repeat(8,1fr);gap:7px}.glass{border:1px solid #bae6fd;background:#f0f9ff;color:#0284c7;border-radius:13px;padding:10px 4px}.glass.on{background:#38bdf8;color:white;border-color:#38bdf8}
-    .section-head{display:flex;justify-content:space-between;align-items:center;gap:12px;margin:6px 0 14px}.stack{display:grid;gap:16px}
-    .calendar-head{display:grid;grid-template-columns:repeat(7,1fr);gap:6px;text-align:center;font-size:12px;color:var(--muted);margin-bottom:6px}.calendar{display:grid;grid-template-columns:repeat(7,1fr);gap:6px}
-    .day{min-height:88px;border:1px solid var(--line);border-radius:14px;padding:8px;background:white;position:relative}.day.other{opacity:.3}.day.today{outline:2px solid #f9a8d4}.day .num{font-weight:800;font-size:13px}
-    .dot{width:7px;height:7px;border-radius:50%;display:inline-block;margin-right:4px}.dot.period{background:#ef4444}.dot.pred{background:#f472b6}.dot.log{background:#8b5cf6}
-    .legend{display:flex;gap:14px;flex-wrap:wrap;font-size:12px;color:var(--muted)}
-    .form-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:14px}.check-grid{display:flex;gap:8px;flex-wrap:wrap}.chip{border:1px solid var(--line);background:white;padding:8px 11px;border-radius:999px;font-size:12px;font-weight:750}.chip.active{background:#fce7f3;border-color:#f9a8d4;color:#be185d}
-    .history{display:grid;gap:10px}.history-item{padding:14px;border:1px solid var(--line);border-radius:16px;display:flex;justify-content:space-between;gap:14px}
-    .barbox{height:10px;border-radius:999px;background:#f3e8ff;overflow:hidden}.bar{height:100%;border-radius:inherit;background:linear-gradient(90deg,#ec4899,#a855f7)}
-    .mobile-nav{display:none}.sync{font-size:12px;font-weight:800}.sync[data-state="synced"]{color:var(--green)}.sync[data-state="syncing"]{color:var(--amber)}.sync[data-state="error"]{color:var(--red)}
-    .empty{padding:28px;text-align:center;color:var(--muted);border:1px dashed var(--line);border-radius:18px}
-    .danger-zone{border-color:#fecaca;background:#fffafa}
-    .loader{width:44px;height:44px;border:4px solid #fce7f3;border-top-color:#ec4899;border-radius:50%;animation:spin 1s linear infinite}@keyframes spin{to{transform:rotate(360deg)}}
+    <style>
+        /* Desain Scrollbar mirip Aplikasi Native */
+        ::-webkit-scrollbar { width: 4px; }
+        ::-webkit-scrollbar-track { background: transparent; }
+        ::-webkit-scrollbar-thumb { background: #fbcfe8; border-radius: 10px; }
+        .dark ::-webkit-scrollbar-thumb { background: #475569; }
+        body { -webkit-tap-highlight-color: transparent; }
+        .instagram-link {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    padding: 5px 40px;
+    color: #94a3b8; /* Sesuaikan dengan warna teks menu "Kalender" dll */
+    text-decoration: none;
+    margin-bottom: 20px; /* Memberi jarak dengan tombol Keluar */
+}
 
-    @media(max-width:900px){
-      .app-shell{display:block}.sidebar{display:none}.topbar{height:66px;padding:0 16px}.main-content{padding:18px 14px 86px}.g3,.g2,.form-grid{grid-template-columns:1fr}
-      .mobile-nav{display:grid;grid-template-columns:repeat(5,1fr);position:fixed;bottom:0;left:0;right:0;z-index:40;background:rgba(255,255,255,.96);backdrop-filter:blur(18px);border-top:1px solid var(--line);padding:7px 5px max(7px,env(safe-area-inset-bottom))}
-      .mobile-nav button{border:0;background:transparent;color:#766b73;font-size:10px;font-weight:800;padding:6px 1px}.mobile-nav button.active{color:#db2777}.mobile-nav span{display:block;font-size:20px;margin-bottom:2px}
-      .day{min-height:62px;padding:5px}.water{grid-template-columns:repeat(4,1fr)}.moods{grid-template-columns:repeat(5,1fr)}
-    }
-  </style>
+.instagram-link:hover, .instagram-link:active {
+    color: #ec4899; /* Warna pink menyesuaikan tema aplikasi saat disentuh */
+}
+
+    </style>
 </head>
-<body>
-  <div id="loading" class="screen center">
-    <div style="text-align:center">
-      <div class="loader" style="margin:auto"></div>
-      <p class="muted">Menyiapkan SiklusKu...</p>
-    </div>
-  </div>
+<body class="bg-pink-50 dark:bg-slate-900 overflow-hidden text-slate-800 dark:text-slate-100">
+    
+    <!-- Tempat Aplikasi Berjalan -->
+    <div id="root"></div>
 
-  <section id="authScreen" class="screen center hidden">
-    <div class="auth-card">
-      <div class="brand"><div class="logo">♡</div><div>Siklus<span style="color:var(--pink)">Ku</span></div></div>
-      <h1 id="authTitle" class="title">Masuk ke akun</h1>
-      <p id="authSubtitle" class="sub">Data kamu tersimpan di cloud dan dapat dipulihkan setelah cache browser dihapus.</p>
-      <div id="authNotice"></div>
+    <script type="text/babel">
+        const { useState, useEffect, useMemo } = React;
 
-      <form id="authForm">
-        <label class="label">Email</label>
-        <input id="email" class="input" type="email" autocomplete="email" required placeholder="nama@email.com">
+        // ==========================================
+        // FIREBASE CONFIGURATION
+        // Firebase Console > Project Settings > General > Your apps > Web app.
+        // Copy firebaseConfig lalu ganti placeholder di bawah.
+        // Nilai config web Firebase bukan secret. Keamanan data ditentukan oleh Auth + Firestore Security Rules.
+        // ==========================================
+        const firebaseConfig = {
+            apiKey: 'AIzaSyDgw4bBKH1cl4J7uAHIBuhUvBTi_F-V_Vo',
+            authDomain: 'siklusku-dc1d0.firebaseapp.com',
+            projectId: 'siklusku-dc1d0',
+            storageBucket: 'siklusku-dc1d0.firebasestorage.app',
+            messagingSenderId: '188397442078',
+            appId: '1:188397442078:web:77159681e40966dc954a0f',
+            measurementId: 'G-BE58JDTQLD'
+        };
 
-        <label class="label">Password</label>
-        <input id="password" class="input" type="password" minlength="6" required placeholder="Minimal 6 karakter">
+        const FIREBASE_CONFIGURED =
+            firebaseConfig.apiKey && !firebaseConfig.apiKey.includes('PASTE_') &&
+            firebaseConfig.authDomain && !firebaseConfig.authDomain.includes('PASTE_') &&
+            firebaseConfig.projectId && !firebaseConfig.projectId.includes('PASTE_') &&
+            firebaseConfig.appId && !firebaseConfig.appId.includes('PASTE_');
 
-        <button id="authSubmit" class="btn btn-primary full" style="margin-top:18px">Masuk</button>
-      </form>
+        let firebaseApp = null;
+        let firebaseAuth = null;
+        let firestoreDb = null;
 
-      <div class="row between" style="margin-top:14px">
-        <button id="toggleAuth" class="btn btn-ghost">Belum punya akun?</button>
-        <button id="forgotBtn" class="btn btn-ghost">Lupa password</button>
-      </div>
-      <p class="small" style="margin-top:18px">SiklusKu membantu pencatatan dan estimasi, bukan diagnosis medis atau metode kontrasepsi.</p>
-    </div>
-  </section>
+        if (FIREBASE_CONFIGURED) {
+            firebaseApp = firebase.initializeApp(firebaseConfig);
+            firebaseAuth = firebase.auth();
+            firestoreDb = firebase.firestore();
 
-  <section id="onboardingScreen" class="screen center hidden">
-    <div class="auth-card" style="width:min(680px,100%)">
-      <div class="brand"><div class="logo">♡</div><div>Lengkapi profil</div></div>
-      <p class="sub">Pengaturan awal ini tersimpan pada akunmu.</p>
-      <div id="onboardNotice"></div>
-      <form id="onboardForm">
-        <div class="form-grid">
-          <div>
-            <label class="label">Nama panggilan</label>
-            <input id="displayName" class="input" required maxlength="50" placeholder="Contoh: Aulia">
-          </div>
-          <div>
-            <label class="label">Umur</label>
-            <input id="age" class="input" type="number" min="10" max="80" required placeholder="Contoh: 22">
-          </div>
-          <div>
-            <label class="label">Hari pertama haid terakhir</label>
-            <input id="lastPeriod" class="input" type="date" required>
-          </div>
-          <div>
-            <label class="label">Rata-rata panjang siklus</label>
-            <input id="cycleLength" class="input" type="number" min="21" max="35" value="28" required>
-          </div>
-          <div>
-            <label class="label">Rata-rata lama menstruasi</label>
-            <input id="periodLength" class="input" type="number" min="3" max="10" value="5" required>
-          </div>
-        </div>
-        <button class="btn btn-primary full" style="margin-top:18px">Simpan & buka SiklusKu</button>
-      </form>
-      <button id="onboardLogout" class="btn btn-ghost full" style="margin-top:10px">Keluar dari akun</button>
-    </div>
-  </section>
+            // Web Firebase memakai persistence LOCAL secara default. Kita set eksplisit supaya sesi
+            // tetap aktif setelah browser ditutup, sampai user logout atau storage browser dihapus.
+            firebaseAuth.setPersistence(firebase.auth.Auth.Persistence.LOCAL).catch((error) => {
+                console.warn('Firebase Auth persistence gagal diaktifkan:', error);
+            });
+        }
 
-  <section id="appScreen" class="screen hidden">
-    <div class="app-shell">
-      <aside class="sidebar">
-        <div class="brand"><div class="logo">♡</div><div>Siklus<span style="color:var(--pink)">Ku</span></div></div>
-        <div class="nav" id="desktopNav">
-          <button data-page="dashboard" class="active">⌂ &nbsp; Beranda</button>
-          <button data-page="calendar">▦ &nbsp; Kalender</button>
-          <button data-page="journal">✎ &nbsp; Jurnal Harian</button>
-          <button data-page="stats">↗ &nbsp; Statistik</button>
-          <button data-page="settings">⚙ &nbsp; Pengaturan</button>
-        </div>
-        <div class="sidebar-foot">
-          <p id="sidebarUser" style="font-weight:850;margin-bottom:3px"></p>
-          <p id="sidebarEmail" class="small" style="word-break:break-word;margin-top:0"></p>
-          <button id="logoutBtn" class="btn btn-ghost full">Keluar</button>
-        </div>
-      </aside>
+        const getLocalDateString = (date = new Date()) => {
+            const y = date.getFullYear();
+            const m = String(date.getMonth() + 1).padStart(2, '0');
+            const d = String(date.getDate()).padStart(2, '0');
+            return `${y}-${m}-${d}`;
+        };
 
-      <main>
-        <header class="topbar">
-          <div>
-            <div id="hello" style="font-weight:900">Halo 👋</div>
-            <div class="small">Catat tubuhmu, pahami polanya.</div>
-          </div>
-          <div class="row">
-            <span id="syncState" class="sync" data-state="synced">● Tersimpan</span>
-          </div>
-        </header>
+        // ==========================================
+        // 1. PEMETAAN IKON (LUCIDE ICONS MURNI)
+        // Menjaga agar desain ikon 100% sama tanpa library luar
+        // ==========================================
+        const LucideIcon = ({ d, size = 24, className = "" }) => (
+            <svg xmlns="http://www.w3.org/2000/svg" width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className} dangerouslySetInnerHTML={{__html: d}} />
+        );
 
-        <div class="main-content">
-          <section id="page-dashboard" class="page stack">
-            <div class="section-head"><div><h1 class="page-title">Beranda</h1><div class="muted">Ringkasan siklus dan jurnal hari ini.</div></div></div>
-            <div class="grid g3">
-              <article class="card hero">
-                <div class="muted">Hari siklus</div>
-                <div id="cycleDayMetric" class="metric">—</div>
-                <div id="phaseText" style="font-weight:850">Memuat...</div>
-              </article>
-              <article class="card">
-                <div class="muted">Perkiraan haid berikutnya</div>
-                <div id="nextPeriodMetric" class="metric" style="font-size:28px">—</div>
-                <div id="predictionBasis" class="small">Berdasarkan data yang tersedia.</div>
-              </article>
-              <article class="card">
-                <div class="muted">Riwayat menstruasi</div>
-                <div id="periodCountMetric" class="metric">0</div>
-                <div class="small">Catatan aktual tersimpan</div>
-              </article>
-            </div>
+        const Menu = (p) => <LucideIcon d='<line x1="4" x2="20" y1="12" y2="12"/><line x1="4" x2="20" y1="6" y2="6"/><line x1="4" x2="20" y1="18" y2="18"/>' {...p}/>;
+        const X = (p) => <LucideIcon d='<path d="M18 6 6 18"/><path d="m6 6 12 12"/>' {...p}/>;
+        const Moon = (p) => <LucideIcon d='<path d="M12 3a6 6 0 0 0 9 9 9 9 0 1 1-9-9Z"/>' {...p}/>;
+        const Sun = (p) => <LucideIcon d='<circle cx="12" cy="12" r="4"/><path d="M12 2v2"/><path d="M12 20v2"/><path d="m4.93 4.93 1.41 1.41"/><path d="m17.66 17.66 1.41 1.41"/><path d="M2 12h2"/><path d="M20 12h2"/><path d="m6.34 17.66-1.41 1.41"/><path d="m19.07 4.93-1.41 1.41"/>' {...p}/>;
+        const CalendarHeart = (p) => <LucideIcon d='<path d="M21 10V6a2 2 0 0 0-2-2H5a2 2 0 0 0-2 2v14c0 1.1.9 2 2 2h7"/><path d="M16 2v4"/><path d="M8 2v4"/><path d="M3 10h18"/><path d="M21.29 14.7a2.43 2.43 0 0 0-2.65-.52c-.3.12-.57.3-.8.53l-.34.34-.35-.34a2.43 2.43 0 0 0-2.65-.53c-.3.12-.56.3-.79.53-.95.94-1 2.53.2 3.74L17.5 22l3.6-3.55c1.2-1.21 1.14-2.8.19-3.74Z"/>' {...p}/>;
+        const Droplets = (p) => <LucideIcon d='<path d="M7 16.3c2.2 0 4-1.83 4-4.05 0-1.16-.57-2.26-1.71-3.19S7 2.9 7 2.9s-2.28 6.16-3.29 7.16C2.57 11.06 2 12.16 2 13.33c0 2.22 1.8 4.02 4 4.05z"/><path d="M12.56 6.6A10.97 10.97 0 0 1 14 8c2 2.5 2 4.5 2 4.5"/><path d="M11 20.3c2.2 0 4-1.83 4-4.05 0-1.16-.57-2.26-1.71-3.19S11 6.9 11 6.9s-2.28 6.16-3.29 7.16C6.57 15.06 6 16.16 6 17.33c0 2.22 1.8 4.02 4 4.05z"/>' {...p}/>;
+        const Droplet = (p) => <LucideIcon d='<path d="M12 22a7 7 0 0 0 7-7c0-2-1-3.9-3-5.5s-3.5-4-4-6.5c-.5 2.5-2 4.9-4 6.5C6 11.1 5 13 5 15a7 7 0 0 0 7 7z"/>' {...p}/>;
+        const Activity = (p) => <LucideIcon d='<polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/>' {...p}/>;
+        const Heart = (p) => <LucideIcon d='<path d="M19 14c1.49-1.46 3-3.21 3-5.5A5.5 5.5 0 0 0 16.5 3c-1.76 0-3 .5-4.5 2-1.5-1.5-2.74-2-4.5-2A5.5 5.5 0 0 0 2 8.5c0 2.3 1.5 4.05 3 5.5l7 7Z"/>' {...p}/>;
+        const Frown = (p) => <LucideIcon d='<circle cx="12" cy="12" r="10"/><path d="M16 16s-1.5-2-4-2-4 2-4 2"/><line x1="9" x2="9.01" y1="9" y2="9"/><line x1="15" x2="15.01" y1="9" y2="9"/>' {...p}/>;
+        const CheckCircle2 = (p) => <LucideIcon d='<circle cx="12" cy="12" r="10"/><path d="m9 12 2 2 4-4"/>' {...p}/>;
+        const ArrowLeft = (p) => <LucideIcon d='<path d="m12 19-7-7 7-7"/><path d="M19 12H5"/>' {...p}/>;
+        const Ban = (p) => <LucideIcon d='<circle cx="12" cy="12" r="10"/><path d="m4.9 4.9 14.2 14.2"/>' {...p}/>;
+        const Apple = (p) => <LucideIcon d='<path d="M12 20.94c1.5 0 2.75 1.06 4 1.06 3 0 6-8 6-12.22A4.91 4.91 0 0 0 17 5c-2.22 0-4 1.44-5 2-1-.56-2.78-2-5-2a4.9 4.9 0 0 0-5 4.78C2 14 5 22 8 22c1.25 0 2.5-1.06 4-1.06Z"/><path d="M10 2c1 .5 2 2 2 5"/>' {...p}/>;
+        const Wind = (p) => <LucideIcon d='<path d="M17.7 7.7a2.5 2.5 0 1 1 1.8 4.3H2"/><path d="M9.6 4.6A2 2 0 1 1 11 8H2"/><path d="M12.6 19.4A2 2 0 1 0 14 16H2"/>' {...p}/>;
+        const Smile = (p) => <LucideIcon d='<circle cx="12" cy="12" r="10"/><path d="M8 14s1.5 2 4 2 4-2 4-2"/><line x1="9" x2="9.01" y1="9" y2="9"/><line x1="15" x2="15.01" y1="9" y2="9"/>' {...p}/>;
+        const BatteryCharging = (p) => <LucideIcon d='<path d="M15 7h1a2 2 0 0 1 2 2v6a2 2 0 0 1-2 2h-2"/><path d="M6 7H4a2 2 0 0 0-2 2v6a2 2 0 0 0 2 2h1"/><path d="m11 7-3 5h4l-3 5"/><line x1="22" x2="22" y1="11" y2="13"/>' {...p}/>;
+        const Sparkles = (p) => <LucideIcon d='<path d="M9.937 15.5A2 2 0 0 0 8.5 14.063l-6.135-1.582a.5.5 0 0 1 0-.962L8.5 9.936A2 2 0 0 0 9.937 8.5l1.582-6.135a.5.5 0 0 1 .963 0L14.063 8.5A2 2 0 0 0 15.5 9.937l6.135 1.581a.5.5 0 0 1 0 .964L15.5 14.063a2 2 0 0 0-1.437 1.437l-1.582 6.135a.5.5 0 0 1-.963 0z"/><path d="M20 3v4"/><path d="M22 5h-4"/><path d="M4 17v2"/><path d="M5 18H3"/>' {...p}/>;
+        const Calendar = (p) => <LucideIcon d='<rect width="18" height="18" x="3" y="4" rx="2" ry="2"/><line x1="16" x2="16" y1="2" y2="6"/><line x1="8" x2="8" y1="2" y2="6"/><line x1="3" x2="21" y1="10" y2="10"/>' {...p}/>;
+        const GlassWater = (p) => <LucideIcon d='<path d="M15.2 22H8.8a2 2 0 0 1-2-1.79L5 3h14l-1.81 17.21A2 2 0 0 1 15.2 22Z"/><path d="M6 12h12"/>' {...p}/>;
+        const ChevronLeft = (p) => <LucideIcon d='<path d="m15 18-6-6 6-6"/>' {...p}/>;
+        const ChevronRight = (p) => <LucideIcon d='<path d="m9 18 6-6-6-6"/>' {...p}/>;
+        const TrendingUp = (p) => <LucideIcon d='<polyline points="22 7 13.5 15.5 8.5 10.5 2 17"/><polyline points="16 7 22 7 22 13"/>' {...p}/>;
+        const BookOpen = (p) => <LucideIcon d='<path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z"/><path d="M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z"/>' {...p}/>;
+        const Clock = (p) => <LucideIcon d='<circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/>' {...p}/>;
+        const AlertCircle = (p) => <LucideIcon d='<circle cx="12" cy="12" r="10"/><line x1="12" x2="12" y1="8" y2="12"/><line x1="12" x2="12.01" y1="16" y2="16"/>' {...p}/>;
+        const Info = (p) => <LucideIcon d='<circle cx="12" cy="12" r="10"/><path d="M12 16v-4"/><path d="M12 8h.01"/>' {...p}/>;
+        const MoonIcon = Moon;
+        const User = (p) => <LucideIcon d='<path d="M19 21v-2a4 4 0 0 0-4-4H9a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/>' {...p}/>;
+        const ArrowRight = (p) => <LucideIcon d='<path d="M5 12h14"/><path d="m12 5 7 7-7 7"/>' {...p}/>;
+        const LogOut = (p) => <LucideIcon d='<path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" x2="9" y1="12" y2="12"/>' {...p}/>;
 
-            <div class="grid g2">
-              <article class="card">
-                <div class="section-head"><div><h3>Mood hari ini</h3><div class="small">Tersimpan per tanggal.</div></div></div>
-                <div id="moodButtons" class="moods"></div>
-              </article>
-              <article class="card">
-                <div class="section-head"><div><h3>Minum hari ini</h3><div class="small"><span id="waterCount">0</span> gelas tercatat.</div></div></div>
-                <div id="waterButtons" class="water"></div>
-              </article>
-            </div>
+        const EggIcon = ({ className = "", size = 24 }) => (
+            <svg viewBox="0 0 24 24" fill="currentColor" className={className} width={size} height={size}>
+                <path d="M12 2C8 2 4 8 4 14C4 18.4183 7.58172 22 12 22C16.4183 22 20 18.4183 20 14C20 8 16 2 12 2Z" />
+            </svg>
+        );
+         // ==========================================
+        // 2. APLIKASI UTAMA (REACT COMPONENT)
+        // ==========================================
+        const App = () => {
+            // ---------- AUTH / CLOUD STATE ----------
+            const [session, setSession] = useState(null);
+            const [authLoading, setAuthLoading] = useState(true);
+            const [profileLoading, setProfileLoading] = useState(false);
+            const [profileReady, setProfileReady] = useState(false);
+            const [showOnboarding, setShowOnboarding] = useState(false);
+            const [authMode, setAuthMode] = useState('login');
+            const [authEmail, setAuthEmail] = useState('');
+            const [authPassword, setAuthPassword] = useState('');
+            const [authError, setAuthError] = useState('');
+            const [authMessage, setAuthMessage] = useState('');
+            const [authBusy, setAuthBusy] = useState(false);
+            const [syncState, setSyncState] = useState('idle');
 
-            <article class="card">
-              <div class="section-head">
-                <div><h3>Status menstruasi</h3><div id="periodStatusText" class="small">Belum ada menstruasi aktif.</div></div>
-                <button id="periodActionBtn" class="btn btn-primary">Mulai haid hari ini</button>
-              </div>
-              <div class="notice info">Gunakan tombol ini untuk mencatat menstruasi aktual. Statistik SiklusKu akan memakai histori aktual, bukan angka demo.</div>
-            </article>
-          </section>
+            // ---------- USER / APP STATE ----------
+            // localStorage hanya dipakai sebagai fallback migrasi data V1 dan preferensi tema.
+            const [userName, setUserName] = useState('');
+            const [userAge, setUserAge] = useState('');
 
-          <section id="page-calendar" class="page stack hidden">
-            <div class="section-head">
-              <div><h1 class="page-title">Kalender</h1><div class="muted">Data aktual dibedakan dari estimasi.</div></div>
-              <div class="row"><button id="prevMonth" class="btn btn-ghost">←</button><strong id="monthTitle"></strong><button id="nextMonth" class="btn btn-ghost">→</button></div>
-            </div>
-            <article class="card">
-              <div class="legend">
-                <span><i class="dot period"></i> Menstruasi aktual</span>
-                <span><i class="dot pred"></i> Estimasi mulai haid</span>
-                <span><i class="dot log"></i> Ada jurnal</span>
-              </div>
-              <div class="calendar-head" style="margin-top:16px"><span>Sen</span><span>Sel</span><span>Rab</span><span>Kam</span><span>Jum</span><span>Sab</span><span>Min</span></div>
-              <div id="calendarGrid" class="calendar"></div>
-            </article>
-          </section>
+            const [lastPeriodDate, setLastPeriodDate] = useState(() => {
+                const legacy = localStorage.getItem('siklusku_lastPeriod');
+                if (legacy) return legacy;
+                const d = new Date();
+                d.setDate(d.getDate() - 2);
+                return getLocalDateString(d);
+            });
+            const [cycleLength, setCycleLength] = useState(() => parseInt(localStorage.getItem('siklusku_cycle')) || 28);
+            const [periodLength, setPeriodLength] = useState(() => parseInt(localStorage.getItem('siklusku_period')) || 5);
 
-          <section id="page-journal" class="page stack hidden">
-            <div><h1 class="page-title">Jurnal Harian</h1><div class="muted">Catat gejala dan kondisi tubuh hari ini.</div></div>
-            <article class="card">
-              <form id="journalForm">
-                <div class="form-grid">
-                  <div>
-                    <label class="label">Aliran darah</label>
-                    <select id="flow" class="select">
-                      <option value="">Tidak dicatat</option><option value="spotting">Spotting</option><option value="light">Ringan</option><option value="medium">Sedang</option><option value="heavy">Berat</option>
-                    </select>
-                  </div>
-                  <div>
-                    <label class="label">Nyeri / kram: <span id="painVal">0</span>/10</label>
-                    <input id="pain" class="input" type="range" min="0" max="10" value="0">
-                  </div>
-                  <div>
-                    <label class="label">Energi: <span id="energyVal">5</span>/10</label>
-                    <input id="energy" class="input" type="range" min="0" max="10" value="5">
-                  </div>
-                  <div>
-                    <label class="label">Kualitas tidur: <span id="sleepVal">5</span>/10</label>
-                    <input id="sleep" class="input" type="range" min="0" max="10" value="5">
-                  </div>
+            const [isDarkMode, setIsDarkMode] = useState(() => localStorage.getItem('siklusku_theme') === 'dark');
+            const [isSidebarOpen, setIsSidebarOpen] = useState(false);
+            const [activeTab, setActiveTab] = useState('beranda');
+
+            const [waterGlasses, setWaterGlasses] = useState(0);
+            const [currentMood, setCurrentMood] = useState(null);
+
+            const [cheeringMessage, setCheeringMessage] = useState("");
+            const [messageKey, setMessageKey] = useState(0);
+
+            const [currentMonth, setCurrentMonth] = useState(new Date().getMonth());
+            const [currentYear, setCurrentYear] = useState(new Date().getFullYear());
+            const [selectedArticle, setSelectedArticle] = useState(null);
+
+            const [tempName, setTempName] = useState(() => localStorage.getItem('siklusku_name') || '');
+            const [tempAge, setTempAge] = useState(() => localStorage.getItem('siklusku_age') || '');
+
+            const currentUserId = session?.uid || null;
+            const todayString = getLocalDateString();
+
+            const friendlyAuthError = (error = {}) => {
+                const code = error?.code || '';
+                const message = error?.message || '';
+                const map = {
+                    'auth/invalid-credential': 'Email atau password salah.',
+                    'auth/wrong-password': 'Email atau password salah.',
+                    'auth/user-not-found': 'Email atau password salah.',
+                    'auth/email-already-in-use': 'Email ini sudah terdaftar. Silakan masuk.',
+                    'auth/invalid-email': 'Format email tidak valid.',
+                    'auth/weak-password': 'Password terlalu lemah. Gunakan minimal 6 karakter.',
+                    'auth/too-many-requests': 'Terlalu banyak percobaan. Tunggu beberapa saat lalu coba lagi.',
+                    'auth/network-request-failed': 'Koneksi ke Firebase gagal. Periksa internet lalu coba lagi.',
+                    'auth/operation-not-allowed': 'Login Email/Password belum diaktifkan di Firebase Authentication.',
+                    'auth/unauthorized-domain': 'Domain website belum diizinkan di Firebase Authentication.'
+                };
+                return map[code] || message || 'Terjadi kesalahan. Coba lagi.';
+            };
+
+            // Firebase Auth memulihkan user yang tersimpan dan memanggil observer saat status login berubah.
+            useEffect(() => {
+                if (!firebaseAuth) {
+                    setAuthLoading(false);
+                    return;
+                }
+
+                const unsubscribe = firebaseAuth.onAuthStateChanged((user) => {
+                    setSession(user || null);
+                    setAuthLoading(false);
+                    if (!user) {
+                        setProfileReady(false);
+                        setShowOnboarding(false);
+                        setUserName('');
+                        setUserAge('');
+                        setWaterGlasses(0);
+                        setCurrentMood(null);
+                    }
+                }, (error) => {
+                    setAuthError(friendlyAuthError(error));
+                    setAuthLoading(false);
+                });
+
+                return () => unsubscribe();
+            }, []);
+
+            // Firestore structure:
+            // users/{uid} -> profil + pengaturan siklus
+            // users/{uid}/dailyLogs/{YYYY-MM-DD} -> mood, air, gejala, dst.
+            // users/{uid}/periodLogs/{id} -> riwayat menstruasi (dipakai di V2.1).
+            useEffect(() => {
+                if (!firestoreDb || !currentUserId) return;
+                let cancelled = false;
+
+                const loadUserData = async () => {
+                    setProfileLoading(true);
+                    setProfileReady(false);
+                    setSyncState('syncing');
+                    setAuthError('');
+
+                    try {
+                        const userRef = firestoreDb.collection('users').doc(currentUserId);
+                        const dailyRef = userRef.collection('dailyLogs').doc(todayString);
+                        const [userSnap, dailySnap] = await Promise.all([
+                            userRef.get(),
+                            dailyRef.get()
+                        ]);
+                        if (cancelled) return;
+
+                        const profile = userSnap.exists ? userSnap.data() : null;
+                        const daily = dailySnap.exists ? dailySnap.data() : null;
+
+                        if (profile?.onboardingCompleted) {
+                            setUserName(profile.displayName || 'Pengguna');
+                            setUserAge(profile.age ? String(profile.age) : '');
+                            setTempName(profile.displayName || '');
+                            setTempAge(profile.age ? String(profile.age) : '');
+                            setShowOnboarding(false);
+                        } else {
+                            setTempName(localStorage.getItem('siklusku_name') || session?.displayName || '');
+                            setTempAge(localStorage.getItem('siklusku_age') || '');
+                            setShowOnboarding(true);
+                        }
+
+                        if (profile) {
+                            if (profile.lastPeriodDate) setLastPeriodDate(profile.lastPeriodDate);
+                            if (profile.cycleLength) setCycleLength(profile.cycleLength);
+                            if (profile.periodLength) setPeriodLength(profile.periodLength);
+                            if (profile.theme) setIsDarkMode(profile.theme === 'dark');
+                        }
+
+                        setCurrentMood(daily?.mood ?? null);
+                        setWaterGlasses(daily?.waterGlasses ?? 0);
+                        setProfileReady(true);
+                        setSyncState('synced');
+                    } catch (error) {
+                        if (!cancelled) {
+                            console.error('Gagal memuat data user dari Firestore:', error);
+                            if (error?.code === 'permission-denied') {
+                                setAuthError('Akses Firestore ditolak. Publish file firestore.rules yang saya sertakan.');
+                            } else {
+                                setAuthError('Data akun belum bisa dimuat dari Firebase. Periksa Firestore dan koneksi internet.');
+                            }
+                            setSyncState('error');
+                        }
+                    } finally {
+                        if (!cancelled) setProfileLoading(false);
+                    }
+                };
+
+                loadUserData();
+                return () => { cancelled = true; };
+            }, [currentUserId]);
+
+            // Tema dicache lokal hanya agar UI tidak berkedip saat startup.
+            useEffect(() => {
+                if (isDarkMode) {
+                    document.documentElement.classList.add('dark');
+                    localStorage.setItem('siklusku_theme', 'dark');
+                } else {
+                    document.documentElement.classList.remove('dark');
+                    localStorage.setItem('siklusku_theme', 'light');
+                }
+            }, [isDarkMode]);
+
+            // Sinkronisasi pengaturan siklus setelah state cloud selesai dimuat.
+            useEffect(() => {
+                if (!firestoreDb || !currentUserId || !profileReady || showOnboarding) return;
+
+                setSyncState('syncing');
+                const timer = setTimeout(async () => {
+                    try {
+                        await firestoreDb.collection('users').doc(currentUserId).set({
+                            lastPeriodDate,
+                            cycleLength,
+                            periodLength,
+                            theme: isDarkMode ? 'dark' : 'light',
+                            updatedAt: firebase.firestore.FieldValue.serverTimestamp()
+                        }, { merge: true });
+                        setSyncState('synced');
+                    } catch (error) {
+                        console.error('Gagal sinkron pengaturan Firebase:', error);
+                        setSyncState('error');
+                    }
+                }, 450);
+
+                return () => clearTimeout(timer);
+            }, [currentUserId, profileReady, showOnboarding, lastPeriodDate, cycleLength, periodLength, isDarkMode]);
+
+            const handleAuthSubmit = async (e) => {
+                e.preventDefault();
+                if (!firebaseAuth) return;
+                setAuthBusy(true);
+                setAuthError('');
+                setAuthMessage('');
+
+                try {
+                    if (authMode === 'register') {
+                        const credential = await firebaseAuth.createUserWithEmailAndPassword(
+                            authEmail.trim(),
+                            authPassword
+                        );
+                        setAuthPassword('');
+                        setAuthMessage('Akun berhasil dibuat. Lengkapi profil SiklusKu kamu.');
+                        // Kirim verifikasi email tanpa memblokir onboarding/data pengguna.
+                        credential.user.sendEmailVerification().catch((error) => {
+                            console.warn('Email verifikasi belum terkirim:', error);
+                        });
+                    } else {
+                        await firebaseAuth.signInWithEmailAndPassword(
+                            authEmail.trim(),
+                            authPassword
+                        );
+                        setAuthPassword('');
+                    }
+                } catch (error) {
+                    setAuthError(friendlyAuthError(error));
+                } finally {
+                    setAuthBusy(false);
+                }
+            };
+
+            const handleForgotPassword = async () => {
+                if (!firebaseAuth || !authEmail.trim()) {
+                    setAuthError('Masukkan email akun terlebih dahulu.');
+                    return;
+                }
+                setAuthBusy(true);
+                setAuthError('');
+                setAuthMessage('');
+                try {
+                    await firebaseAuth.sendPasswordResetEmail(authEmail.trim());
+                    setAuthMessage('Link reset password sudah dikirim. Cek inbox atau folder spam email kamu.');
+                } catch (error) {
+                    setAuthError(friendlyAuthError(error));
+                } finally {
+                    setAuthBusy(false);
+                }
+            };
+
+            const handleStartApp = async (e) => {
+                e.preventDefault();
+                if (!firestoreDb || !currentUserId || !tempName.trim() || !tempAge) return;
+
+                const parsedAge = Number(tempAge);
+                if (parsedAge < 10 || parsedAge > 80) {
+                    setAuthError('Umur harus berada di antara 10 sampai 80 tahun.');
+                    return;
+                }
+
+                setAuthBusy(true);
+                setAuthError('');
+                setSyncState('syncing');
+
+                try {
+                    await firestoreDb.collection('users').doc(currentUserId).set({
+                        displayName: tempName.trim(),
+                        age: parsedAge,
+                        onboardingCompleted: true,
+                        email: session?.email || authEmail.trim() || null,
+                        lastPeriodDate,
+                        cycleLength,
+                        periodLength,
+                        theme: isDarkMode ? 'dark' : 'light',
+                        createdAt: firebase.firestore.FieldValue.serverTimestamp(),
+                        updatedAt: firebase.firestore.FieldValue.serverTimestamp()
+                    }, { merge: true });
+
+                    if (session && !session.displayName) {
+                        session.updateProfile({ displayName: tempName.trim() }).catch(() => {});
+                    }
+
+                    setUserName(tempName.trim());
+                    setUserAge(String(parsedAge));
+                    setShowOnboarding(false);
+                    setProfileReady(true);
+                    setSyncState('synced');
+
+                    ['siklusku_name', 'siklusku_age', 'siklusku_lastPeriod', 'siklusku_cycle', 'siklusku_period']
+                        .forEach(key => localStorage.removeItem(key));
+                } catch (error) {
+                    console.error('Gagal menyimpan onboarding Firebase:', error);
+                    setAuthError(error?.code === 'permission-denied'
+                        ? 'Profil ditolak Firestore. Publish Security Rules terlebih dahulu.'
+                        : 'Profil belum tersimpan ke Firebase. Periksa koneksi dan konfigurasi Firestore.');
+                    setSyncState('error');
+                } finally {
+                    setAuthBusy(false);
+                }
+            };
+
+            const handleLogout = async () => {
+                setIsSidebarOpen(false);
+                if (!firebaseAuth) return;
+                try {
+                    await firebaseAuth.signOut();
+                    setAuthMode('login');
+                    setAuthMessage('Kamu sudah keluar dari SiklusKu.');
+                } catch (error) {
+                    setAuthError(friendlyAuthError(error));
+                }
+            };
+
+            const saveDailyLog = async (patch) => {
+                if (!firestoreDb || !currentUserId || !profileReady) return;
+                setSyncState('syncing');
+                try {
+                    await firestoreDb.collection('users').doc(currentUserId)
+                        .collection('dailyLogs').doc(todayString).set({
+                            ...patch,
+                            logDate: todayString,
+                            updatedAt: firebase.firestore.FieldValue.serverTimestamp()
+                        }, { merge: true });
+                    setSyncState('synced');
+                } catch (error) {
+                    console.error('Gagal menyimpan jurnal harian Firebase:', error);
+                    setSyncState('error');
+                }
+            };
+
+            const updateWaterGlasses = (value) => {
+                setWaterGlasses(value);
+                saveDailyLog({ waterGlasses: value });
+            };
+
+            const moodQuotes = {
+                0: ["Peluk jauh! 🫂 Ingat, kamu kuat dan rasa ini bakal berlalu kok.", "Nggak apa-apa sedih, wajar kok! Makan cokelat gih sana, aku izinkan! 🍫", "Air mata itu ibarat keringatnya hati yang lagi olahraga. Nangis aja kalau perlu! 💦", "Ugh, rahim emang kadang ngeselin! Ayo rebahan aja, kamu berhak istirahat! 🛏️", "Dunia mungkin terasa berat hari ini, tapi pundakmu lebih kuat dari yang kamu kira! 💪"],
+                1: ["Tarik napas panjang... hembuskan. Kamu sudah melakukan yang terbaik hari ini! ✨", "Cemas itu cuma pikiran jahat yang numpang lewat. Kamu aman, kamu disayangi! ❤️", "Overthinking nggak akan nambahin saldo rekening. Yuk, istirahat dulu pikirannya! 🧘‍♀️", "Semua akan baik-baik saja. Kalau belum baik, berarti belum selesai! 🎬", "Hormon emang suka bercanda! Sabar ya, besok pasti lebih tenang! 🌈"],
+                2: ["Mood standar pabrik ya hari ini? Bagus deh, yang penting damai! 🍃", "Nggak sedih, nggak seneng amat. Cocok buat rebahan sambil scroll TikTok! 📱", "Hari yang pas buat nge-teh cantik sambil nonton drakor favorit. ☕", "Biasa aja tuh juga sebuah pencapaian lho di tengah badai hormon! 🏆", "Keseimbangan adalah kunci. Pertahankan aura zen-mu hari ini! ⚖️"],
+                3: ["Asyik! Aura positifmu sampai kerasa ke sini lho! ✨", "Senyum terus ya! Cantiknya nambah 100% kalau lagi seneng gini! 😍", "Yeay! Jangan lupa bersyukur dan kasih self-reward kecil-kecilan hari ini! 🎁", "Hormon endorfin lagi menang banyak nih! Pertahankan ya manis! 🎉", "Kabar baik apa nih hari ini? Apapun itu, aku ikut seneng lihatnya! 🥳"],
+                4: ["Wuih, energinya tumpah-tumpah! Jangan lupa disalurin buat hal positif ya! ⚡", "Menyala saudariku! 🔥 Hari ini kamu tak terkalahkan!", "Kalau lagi seceria ini, kayaknya disuruh lari maraton juga sanggup deh! 🏃‍♀️💨", "Wow, mood-nya lagi di pucuk gunung! Awas ketabrak awan! ☁️🤩", "Ceria banget! Pasti barusan lihat ayang atau paket keranjangnya dateng ya? 📦💖"]
+            };
+
+            const handleMoodClick = (idx) => {
+                setCurrentMood(idx);
+                saveDailyLog({ mood: idx });
+                const quotes = moodQuotes[idx];
+                let randomIndex = Math.floor(Math.random() * quotes.length);
+                while (quotes[randomIndex] === cheeringMessage && quotes.length > 1) {
+                randomIndex = Math.floor(Math.random() * quotes.length);
+                }
+                setCheeringMessage(quotes[randomIndex]);
+                setMessageKey(prevKey => prevKey + 1);
+            };
+
+            const getPhaseForDate = (checkDate, baseDate, cycleL, periodL) => {
+                const cDate = new Date(checkDate); cDate.setHours(0,0,0,0);
+                const bDate = new Date(baseDate); bDate.setHours(0,0,0,0);
+                const diffTime = cDate - bDate;
+                const diffDays = Math.floor(diffTime / (1000 * 60 * 60 * 24));
+                let dayOfCycle;
+                if (diffDays >= 0) { dayOfCycle = (diffDays % cycleL) + 1; } 
+                else { dayOfCycle = cycleL - (Math.abs(diffDays + 1) % cycleL); if (dayOfCycle === 0) dayOfCycle = cycleL; }
+
+                if (dayOfCycle <= periodL) return { phase: "Menstruasi", color: "bg-red-500", text: "text-red-600 dark:text-red-400", bgLight: "bg-red-100 dark:bg-red-900/30" };
+                if (dayOfCycle > cycleL - 16 && dayOfCycle <= cycleL - 12) return { phase: "Ovulasi", color: "bg-yellow-400", text: "text-amber-600 dark:text-yellow-400", bgLight: "bg-yellow-100 dark:bg-yellow-900/30" };
+                if (dayOfCycle > periodL && dayOfCycle <= cycleL - 16) return { phase: "Paska Menstruasi", color: "bg-pink-400", text: "text-pink-600 dark:text-pink-400", bgLight: "bg-pink-50 dark:bg-pink-900/20" };
+                return { phase: "Pra Menstruasi", color: "bg-purple-400", text: "text-purple-600 dark:text-purple-400", bgLight: "bg-purple-100 dark:bg-purple-900/30" };
+            };
+
+            const cycleInfo = useMemo(() => {
+                const today = new Date();
+                const info = getPhaseForDate(today, lastPeriodDate, cycleLength, periodLength);
+                const bDate = new Date(lastPeriodDate); bDate.setHours(0,0,0,0);
+                const diffTime = today.setHours(0,0,0,0) - bDate;
+                const diffDays = Math.floor(diffTime / (1000 * 60 * 60 * 24));
+                const currentDayOfCycle = diffDays >= 0 ? (diffDays % cycleLength) + 1 : cycleLength - (Math.abs(diffDays + 1) % cycleLength);
+                const daysUntilNextPeriod = cycleLength - currentDayOfCycle + 1;
+                const nextPeriodDate = new Date(today); nextPeriodDate.setDate(today.getDate() + daysUntilNextPeriod);
+                return { currentDayOfCycle, phase: info.phase, phaseColor: info.color, daysUntilNextPeriod, nextPeriodDate };
+            }, [lastPeriodDate, cycleLength, periodLength]);
+
+            const currentTips = {
+                "Menstruasi": { quote: "Istirahatlah sejenak, tubuhmu sedang bekerja keras hari ini! 🌸", waterTarget: 8, dos: ["Teh Chamomile/Jahe hangat", "Sayuran hijau tua (bayam)", "Cokelat hitam", "Daging merah tanpa lemak"], donts: ["Kopi dan minuman berkafein tinggi", "Makanan terlalu asin", "Makanan pedas berlebihan"], exercise: ["Yoga peregangan ringan", "Jalan santai di pagi hari", "Child's pose"], activity: ["Kompres perut dengan air hangat", "Tidur minimal 8 jam", "Me-time menonton film santai"] },
+                "Paska Menstruasi": { quote: "Energi kembali penuh! Waktunya bersinar dan produktif! ✨", waterTarget: 8, dos: ["Makanan tinggi protein", "Buah-buahan segar", "Karbohidrat kompleks", "Yogurt / Probiotik"], donts: ["Makanan cepat saji", "Terlalu banyak gula buatan", "Gorengan berlebih"], exercise: ["Jogging ringan", "Bersepeda", "Zumba atau aerobik"], activity: ["Mulai proyek baru", "Bersosialisasi dengan teman", "Brainstorming ide"] },
+                "Ovulasi": { quote: "Masa subur! Kamu sedang berada di puncak pesona dan energimu! 💃", waterTarget: 10, dos: ["Ikan Salmon", "Kacang-kacangan", "Banyak air putih", "Buah berry"], donts: ["Makanan olahan pabrik", "Lemak trans", "Alkohol"], exercise: ["Latihan intensitas tinggi (HIIT)", "Berenang", "Angkat beban"], activity: ["Presentasi penting", "Kencan romantis", "Eksplorasi hobi baru"] },
+                "Pra Menstruasi": { quote: "Hari H makin dekat, wajar jika mood sedikit berantakan. Be gentle to yourself! ☁️", waterTarget: 8, dos: ["Pisang (Kaya magnesium)", "Ubi jalar", "Biji labu", "Mandi air hangat"], donts: ["Garam berlebih", "Kafein (memicu cemas)", "Gula berlebih"], exercise: ["Pilates santai", "Peregangan otot pinggang", "Latihan pernapasan"], activity: ["Meditasi atau mindfulness", "Kurangi interaksi pemicu stres", "Skincare routine panjang"] }
+            }[cycleInfo.phase];
+            
+            const articles = [
+                { id: 1, category: "Kesehatan", icon: AlertCircle, time: "3 min baca", title: "Mengapa Perut Terasa Kram Saat Hari Pertama Haid?", desc: "Penjelasan medis mengenai kontraksi rahim dan cara alami meredakannya tanpa obat keras.", content: ["Kram perut atau dismenore pada hari pertama menstruasi adalah hal yang sangat umum dialami oleh banyak wanita. Rasa sakit ini disebabkan oleh hormon bernama prostaglandin yang memicu otot rahim berkontraksi untuk meluruhkan lapisannya.", "Semakin tinggi kadar prostaglandin, semakin kuat kontraksi yang terjadi. Kontraksi yang terlalu kuat ini bisa menekan pembuluh darah di sekitarnya, memutus suplai oksigen ke jaringan rahim sesaat, yang akhirnya mengirimkan sinyal rasa sakit ke otak.", "Untuk meredakannya secara alami, kamu bisa mencoba mengompres perut dengan botol air hangat. Panas membantu melemaskan otot rahim yang tegang. Selain itu, meminum teh jahe atau teh chamomile hangat terbukti secara klinis dapat menurunkan kadar prostaglandin dan memberikan efek rileks pada tubuh."] },
+                { id: 2, category: "Nutrisi", icon: Apple, time: "5 min baca", title: "7 Makanan Ajaib Penyelamat Mood Swing PMS", desc: "Dari cokelat hitam hingga pisang, temukan makanan yang terbukti memperbaiki mood saat PMS.", content: ["Pre-Menstrual Syndrome (PMS) seringkali membawa gelombang emosi yang naik turun alias mood swing. Hal ini disebabkan oleh fluktuasi hormon estrogen dan progesteron yang mempengaruhi zat kimia otak seperti serotonin (hormon kebahagiaan).", "Kabar baiknya, asupan makanan yang tepat bisa menjadi penyelamat! Pertama, Cokelat Hitam (minimal 70% kakao) kaya akan magnesium dan antioksidan yang merangsang pelepasan endorfin. Kedua, Pisang yang sarat akan vitamin B6 dan kalium, sangat ampuh mengurangi kembung dan menstabilkan mood.", "Jangan lupa juga untuk mengonsumsi ikan berlemak seperti salmon yang kaya Omega-3, serta kacang almond. Hindari makanan yang terlalu asin atau tinggi gula olahan karena justru akan membuat tubuh cepat lelah dan emosi semakin tidak stabil."] },
+                { id: 3, category: "Olahraga", icon: Activity, time: "4 min baca", title: "Mitos Berkeringat: Bolehkah Olahraga Berat Saat Menstruasi?", desc: "Fakta dibalik mitos olahraga saat haid. Kapan tubuh bilang 'berhenti' dan kapan bilang 'lanjutkan'.", content: ["Banyak mitos beredar yang melarang wanita berolahraga saat sedang menstruasi. Faktanya, olahraga justru sangat dianjurkan! Berolahraga memicu produksi endorfin, yang merupakan obat penghilang rasa sakit alami dari dalam tubuh, sehingga dapat mengurangi kram punggung dan perut.", "Namun, intensitasnya perlu disesuaikan. Pada hari ke-1 dan ke-2 saat aliran darah sedang deras-derasnya, tubuh menggunakan banyak energi. Lakukan olahraga ringan seperti yoga, peregangan (stretching), atau jalan santai.", "Jika kamu merasa lemas, pusing, atau aliran darah bertambah drastis setelah berolahraga berat seperti HIIT atau angkat beban, itu adalah sinyal dari tubuh untuk 'berhenti' dan beristirahat. Dengarkan tubuhmu, karena tidak ada aturan baku yang sama untuk setiap wanita."] },
+                { id: 4, category: "Edukasi", icon: Info, time: "6 min baca", title: "Mengenal Fase Folikuler: Waktu Terbaik Memulai Hal Baru", desc: "Manfaatkan lonjakan energi pasca menstruasi untuk produktivitas maksimalmu.", content: ["Fase folikuler dimulai setelah menstruasi selesai dan berlangsung hingga masa ovulasi tiba. Di fase ini, kelenjar pituitari di otak melepaskan hormon perangsang folikel (FSH) yang memberi sinyal pada ovarium untuk mematangkan sel telur.", "Seiring matangnya sel telur, kadar hormon estrogen dalam tubuh akan meningkat tajam. Efeknya? Kamu akan merasa energi kembali penuh, pikiran lebih jernih, kulit terlihat lebih *glowing*, dan mood menjadi sangat positif dan optimis.", "Inilah mengapa fase folikuler disebut sebagai 'Musim Semi' dalam siklus wanita. Manfaatkan waktu emas ini untuk memulai proyek baru, melakukan presentasi penting, merencanakan jadwal sebulan ke depan, atau mempelajari keterampilan baru (hobi). Otak dan tubuhmu sedang berada dalam performa puncak!"] },
+                { id: 5, category: "Kesehatan", icon: Sparkles, time: "4 min baca", title: "Tanda-tanda Masa Subur (Ovulasi) yang Sering Tidak Disadari", desc: "Pelajari perubahan unik pada tubuhmu saat melepaskan sel telur.", content: ["Masa ovulasi adalah saat dimana ovarium melepaskan sel telur yang sudah matang. Selain menggunakan kalender, tubuh sebenarnya memberikan sinyal-sinyal alami yang seringkali tidak kita sadari.", "Tanda paling jelas adalah perubahan pada lendir serviks. Menjelang ovulasi, cairan akan menjadi lebih jernih, licin, dan melar mirip seperti putih telur mentah. Ini bertujuan untuk membantu sperma berenang lebih mudah.", "Selain itu, beberapa wanita mengalami peningkatan suhu tubuh basal (suhu tubuh saat bangun tidur pagi) sebesar 0.5 derajat. Tanda lainnya termasuk peningkatan indera penciuman, nyeri ringan di salah satu sisi perut bawah (disebut Mittelschmerz), dan peningkatan energi serta gairah secara alami."] },
+                { id: 6, category: "Kesehatan", icon: MoonIcon, time: "5 min baca", title: "Pentingnya Menjaga Kualitas Tidur Menjelang Hari H", desc: "Mengapa insomnia sering menyerang saat PMS dan bagaimana cara mengatasinya.", content: ["Pernahkah kamu merasa sangat sulit tidur beberapa hari sebelum menstruasi dimulai? Kamu tidak sendirian. Penurunan drastis hormon progesteron menjelang hari H seringkali memicu insomnia, kecemasan di malam hari, dan peningkatan suhu tubuh yang membuat tidur tidak nyenyak.", "Kurang tidur saat PMS akan memperparah gejala lainnya seperti kram, perubahan mood, dan rasa lelah berlebih. Oleh karena itu, *sleep hygiene* menjadi sangat penting di fase ini.", "Cobalah untuk menurunkan suhu kamar menjadi lebih sejuk, hindari menatap layar *gadget* (blue light) setidaknya satu jam sebelum tidur, dan lakukan rutinitas relaksasi seperti membaca buku atau mendengarkan musik *lo-fi*. Mandi air hangat sebelum tidur juga sangat dianjurkan karena saat tubuh mendingin setelah mandi, otak akan menangkap sinyal bahwa sudah waktunya untuk tidur."] }
+            ];
+
+            // --- AUTH / SETUP VIEWS ---
+            const ShellCard = ({ children, wide = false }) => (
+                <div className="min-h-screen bg-gradient-to-br from-pink-100 via-purple-50 to-pink-200 dark:from-slate-900 dark:via-slate-800 dark:to-slate-900 flex items-center justify-center p-4 font-sans text-slate-800 dark:text-slate-100 overflow-y-auto">
+                    <div className={`bg-white/85 dark:bg-slate-800/85 backdrop-blur-xl p-7 md:p-10 rounded-[2.5rem] shadow-2xl ${wide ? 'max-w-2xl' : 'max-w-md'} w-full border border-white/60 dark:border-slate-700 my-6`}>
+                        {children}
+                    </div>
+                </div>
+            );
+
+            const BrandHeader = ({ title, subtitle }) => (
+                <>
+                    <div className="flex justify-center mb-5">
+                        <div className="w-20 h-20 bg-gradient-to-tr from-pink-400 to-purple-400 rounded-full flex items-center justify-center shadow-lg relative animate-bounce-short">
+                            <CalendarHeart size={40} className="text-white" />
+                            <Sparkles size={24} className="absolute -top-2 -right-2 text-yellow-300" />
+                        </div>
+                    </div>
+                    <h1 className="text-3xl font-black text-center mb-2">{title}</h1>
+                    <p className="text-center text-slate-500 dark:text-slate-400 mb-7 text-sm leading-relaxed">{subtitle}</p>
+                </>
+            );
+
+            const AlertBox = () => (
+                <>
+                    {authError && <div className="mb-5 p-4 rounded-2xl bg-red-50 dark:bg-red-900/20 border border-red-100 dark:border-red-900/30 text-red-600 dark:text-red-300 text-sm font-medium">{authError}</div>}
+                    {authMessage && <div className="mb-5 p-4 rounded-2xl bg-green-50 dark:bg-green-900/20 border border-green-100 dark:border-green-900/30 text-green-700 dark:text-green-300 text-sm font-medium">{authMessage}</div>}
+                </>
+            );
+
+            if (!FIREBASE_CONFIGURED) {
+                return (
+                    <ShellCard>
+                        <BrandHeader title={<span>Siklus<span className="text-pink-500">Ku</span> Firebase</span>} subtitle="Frontend sudah dimigrasikan ke Firebase. Masukkan konfigurasi Web App Firebase untuk mengaktifkan login dan cloud database." />
+                        <div className="space-y-4">
+                            <div className="p-5 bg-amber-50 dark:bg-amber-900/20 rounded-2xl border border-amber-200 dark:border-amber-900/30">
+                                <p className="font-bold text-amber-700 dark:text-amber-300 mb-2">Firebase belum dikonfigurasi</p>
+                                <p className="text-sm text-slate-600 dark:text-slate-300 leading-relaxed">Buka bagian <code className="font-mono text-xs bg-white dark:bg-slate-700 px-2 py-1 rounded">FIREBASE CONFIGURATION</code> di file ini, lalu tempel object <code>firebaseConfig</code> dari Firebase Console.</p>
+                            </div>
+                            <div className="p-5 bg-slate-50 dark:bg-slate-700/50 rounded-2xl text-sm text-slate-600 dark:text-slate-300 space-y-2">
+                                <p>1. Aktifkan Authentication → Email/Password.</p>
+                                <p>2. Buat Cloud Firestore.</p>
+                                <p>3. Publish Security Rules dari file <b>firestore.rules</b> yang saya sertakan.</p>
+                                <p>4. Register Web App, lalu copy konfigurasi Firebase ke HTML.</p>
+                                <p>5. Tambahkan domain Vercel kamu di Authentication → Settings → Authorized domains.</p>
+                            </div>
+                        </div>
+                    </ShellCard>
+                );
+            }
+
+            if (authLoading) {
+                return (
+                    <ShellCard>
+                        <BrandHeader title={<span>Siklus<span className="text-pink-500">Ku</span></span>} subtitle="Memulihkan sesi akun dan menyiapkan data kamu..." />
+                        <div className="flex justify-center"><div className="w-10 h-10 rounded-full border-4 border-pink-100 border-t-pink-500 animate-spin"></div></div>
+                    </ShellCard>
+                );
+            }
+
+            if (!session) {
+                const isRegister = authMode === 'register';
+                return (
+                    <ShellCard>
+                        <BrandHeader
+                            title={<span>{isRegister ? 'Buat Akun' : 'Masuk ke'} <span className="text-pink-500">SiklusKu</span></span>}
+                            subtitle={isRegister ? 'Buat akun agar riwayat siklus tetap tersimpan walaupun cache browser terhapus atau kamu pindah perangkat.' : 'Masuk untuk memulihkan profil, pengaturan siklus, mood, dan hidrasi dari database.'}
+                        />
+                        <AlertBox />
+                        <form onSubmit={handleAuthSubmit} className="space-y-5">
+                            <div className="space-y-2">
+                                <label className="text-sm font-bold text-slate-700 dark:text-slate-300 ml-2">Email</label>
+                                <input type="email" autoComplete="email" required placeholder="nama@email.com" value={authEmail} onChange={(e) => setAuthEmail(e.target.value)} className="w-full bg-slate-50 dark:bg-slate-700/50 border border-slate-200 dark:border-slate-600 rounded-2xl p-4 focus:ring-4 focus:ring-pink-200 dark:focus:ring-pink-900 outline-none transition-all" />
+                            </div>
+                            <div className="space-y-2">
+                                <div className="flex justify-between items-center px-2">
+                                    <label className="text-sm font-bold text-slate-700 dark:text-slate-300">Password</label>
+                                    {!isRegister && <button type="button" onClick={handleForgotPassword} className="text-xs font-semibold text-pink-500 hover:text-pink-600">Lupa password?</button>}
+                                </div>
+                                <input type="password" autoComplete={isRegister ? 'new-password' : 'current-password'} minLength="6" required placeholder="Minimal 6 karakter" value={authPassword} onChange={(e) => setAuthPassword(e.target.value)} className="w-full bg-slate-50 dark:bg-slate-700/50 border border-slate-200 dark:border-slate-600 rounded-2xl p-4 focus:ring-4 focus:ring-pink-200 dark:focus:ring-pink-900 outline-none transition-all" />
+                            </div>
+                            <button type="submit" disabled={authBusy} className="w-full bg-gradient-to-r from-pink-500 to-purple-500 hover:from-pink-600 hover:to-purple-600 text-white font-bold text-lg py-4 rounded-2xl shadow-lg hover:shadow-xl transition-all flex justify-center items-center gap-2 disabled:opacity-60 disabled:cursor-not-allowed">
+                                {authBusy ? 'Memproses...' : isRegister ? 'Daftar Sekarang' : 'Masuk'} {!authBusy && <ArrowRight size={20} />}
+                            </button>
+                        </form>
+                        <div className="mt-6 text-center text-sm text-slate-500 dark:text-slate-400">
+                            {isRegister ? 'Sudah punya akun?' : 'Belum punya akun?'}{' '}
+                            <button onClick={() => { setAuthMode(isRegister ? 'login' : 'register'); setAuthError(''); setAuthMessage(''); }} className="font-bold text-pink-500 hover:text-pink-600">{isRegister ? 'Masuk' : 'Daftar gratis'}</button>
+                        </div>
+                        <p className="text-center text-[11px] leading-relaxed text-slate-400 mt-6">Data aplikasi disimpan per akun di Cloud Firestore dan dibatasi dengan Firebase Security Rules. Jangan gunakan SiklusKu sebagai alat diagnosis medis.</p>
+                    </ShellCard>
+                );
+            }
+
+            if (profileLoading || !profileReady) {
+                return (
+                    <ShellCard>
+                        <BrandHeader title="Sinkronisasi Akun" subtitle="Mengambil profil dan jurnal SiklusKu kamu dari Cloud Firestore..." />
+                        <AlertBox />
+                        {!authError && <div className="flex justify-center"><div className="w-10 h-10 rounded-full border-4 border-pink-100 border-t-pink-500 animate-spin"></div></div>}
+                        {authError && <button onClick={() => window.location.reload()} className="w-full bg-slate-900 dark:bg-white dark:text-slate-900 text-white font-bold py-3 rounded-2xl">Muat Ulang</button>}
+                    </ShellCard>
+                );
+            }
+
+            if (showOnboarding) {
+                return (
+                    <ShellCard wide>
+                        <BrandHeader title={<span>Lengkapi <span className="text-pink-500">Profil</span></span>} subtitle="Sekali saja. Data ini akan dikaitkan ke akun kamu dan dipakai sebagai titik awal prediksi." />
+                        <AlertBox />
+                        <form onSubmit={handleStartApp} className="grid grid-cols-1 md:grid-cols-2 gap-5">
+                            <div className="space-y-2">
+                                <label className="text-sm font-bold text-slate-700 dark:text-slate-300 ml-2 flex items-center gap-2"><User size={16} className="text-pink-500" /> Nama Panggilan</label>
+                                <input type="text" required placeholder="Contoh: Aulia" value={tempName} onChange={(e) => setTempName(e.target.value)} className="w-full bg-slate-50 dark:bg-slate-700/50 border border-slate-200 dark:border-slate-600 rounded-2xl p-4 focus:ring-4 focus:ring-pink-200 dark:focus:ring-pink-900 outline-none" />
+                            </div>
+                            <div className="space-y-2">
+                                <label className="text-sm font-bold text-slate-700 dark:text-slate-300 ml-2 flex items-center gap-2"><Heart size={16} className="text-pink-500" /> Umur</label>
+                                <input type="number" required min="10" max="80" placeholder="Contoh: 22" value={tempAge} onChange={(e) => setTempAge(e.target.value)} className="w-full bg-slate-50 dark:bg-slate-700/50 border border-slate-200 dark:border-slate-600 rounded-2xl p-4 focus:ring-4 focus:ring-pink-200 dark:focus:ring-pink-900 outline-none" />
+                            </div>
+                            <div className="space-y-2 md:col-span-2">
+                                <label className="text-sm font-bold text-slate-700 dark:text-slate-300 ml-2 flex items-center gap-2"><CalendarHeart size={16} className="text-pink-500" /> Hari Pertama Haid Terakhir</label>
+                                <input type="date" required max={todayString} value={lastPeriodDate} onChange={(e) => setLastPeriodDate(e.target.value)} className="w-full bg-slate-50 dark:bg-slate-700/50 border border-slate-200 dark:border-slate-600 rounded-2xl p-4 focus:ring-4 focus:ring-pink-200 dark:focus:ring-pink-900 outline-none" />
+                            </div>
+                            <div className="space-y-3 p-4 bg-pink-50 dark:bg-slate-700/40 rounded-2xl">
+                                <label className="text-sm font-bold flex justify-between"><span>Rata-rata Siklus</span><span className="text-pink-500">{cycleLength} hari</span></label>
+                                <input type="range" min="21" max="35" value={cycleLength} onChange={(e) => setCycleLength(Number(e.target.value))} className="w-full accent-pink-500" />
+                            </div>
+                            <div className="space-y-3 p-4 bg-pink-50 dark:bg-slate-700/40 rounded-2xl">
+                                <label className="text-sm font-bold flex justify-between"><span>Lama Menstruasi</span><span className="text-pink-500">{periodLength} hari</span></label>
+                                <input type="range" min="3" max="10" value={periodLength} onChange={(e) => setPeriodLength(Number(e.target.value))} className="w-full accent-pink-500" />
+                            </div>
+                            <button type="submit" disabled={authBusy} className="md:col-span-2 w-full bg-gradient-to-r from-pink-500 to-purple-500 text-white font-bold text-lg py-4 rounded-2xl shadow-lg disabled:opacity-60 flex justify-center items-center gap-2">{authBusy ? 'Menyimpan...' : 'Simpan & Buka SiklusKu'} {!authBusy && <ArrowRight size={20} />}</button>
+                        </form>
+                        <button onClick={handleLogout} className="w-full mt-4 text-sm text-slate-400 hover:text-red-500">Keluar dari akun</button>
+                    </ShellCard>
+                );
+            }
+
+            // --- COMPONENTS ---
+            const WaterTracker = () => (
+                <div className="bg-white dark:bg-slate-800 p-5 rounded-3xl shadow-sm border border-pink-100 dark:border-slate-700 h-full">
+                <div className="flex justify-between items-center mb-4">
+                    <h3 className="font-bold text-slate-800 dark:text-pink-100 flex items-center gap-2"><Droplets size={20} className="text-blue-400" /> Target Minum Air</h3>
+                    <span className="text-sm font-medium text-pink-500 dark:text-pink-400 bg-pink-50 dark:bg-slate-700 px-3 py-1 rounded-full">{waterGlasses} / {currentTips.waterTarget} Gelas</span>
+                </div>
+                <div className="flex flex-wrap gap-2 justify-center">
+                    {[...Array(currentTips.waterTarget)].map((_, i) => (
+                    <button key={i} onClick={() => updateWaterGlasses(i + 1 === waterGlasses ? i : i + 1)} className={`p-2 rounded-2xl transition-all duration-300 transform active:scale-90 ${i < waterGlasses ? 'bg-blue-100 dark:bg-blue-900 text-blue-500 dark:text-blue-300 shadow-inner' : 'bg-slate-100 dark:bg-slate-700 text-slate-300 dark:text-slate-500 hover:bg-blue-50 dark:hover:bg-slate-600'}`}>
+                        <GlassWater size={28} className={i < waterGlasses ? 'animate-bounce-short' : ''} />
+                    </button>
+                    ))}
+                </div>
+                </div>
+            );
+            const BerandaView = () => (
+                <div className="space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-500">
+                <div className="mb-2">
+                    <h1 className="text-2xl md:text-3xl font-bold text-slate-800 dark:text-white">Hai, <span className="text-pink-500">{userName}!</span> 👋</h1>
+                    <p className="text-slate-500 dark:text-slate-400 mt-1">Gimana kabarmu hari ini? Mari kita cek siklusmu.</p>
                 </div>
 
-                <label class="label">Gejala</label>
-                <div id="symptomChips" class="check-grid"></div>
+                <div className="relative bg-white dark:bg-slate-800 rounded-[2.5rem] p-8 shadow-sm border border-pink-100 dark:border-slate-700 overflow-hidden flex flex-col md:flex-row items-center gap-8">
+                    <div className={`absolute -right-20 -top-20 w-64 h-64 rounded-full mix-blend-multiply dark:mix-blend-soft-light filter blur-3xl opacity-30 ${cycleInfo.phaseColor}`}></div>
+                    <div className={`absolute -left-20 -bottom-20 w-64 h-64 rounded-full mix-blend-multiply dark:mix-blend-soft-light filter blur-3xl opacity-30 bg-purple-300`}></div>
 
-                <label class="label">Catatan pribadi</label>
-                <textarea id="notes" class="textarea" maxlength="1500" placeholder="Contoh: kram lebih terasa setelah bangun tidur..."></textarea>
-                <button class="btn btn-primary" style="margin-top:14px">Simpan jurnal hari ini</button>
-              </form>
-            </article>
-          </section>
+                    <div className="relative z-10 flex-1 text-center md:text-left">
+                    <div className="inline-block px-4 py-1.5 rounded-full bg-pink-100 dark:bg-slate-700 text-pink-600 dark:text-pink-300 font-semibold text-sm mb-4">Siklus Hari Ke-{cycleInfo.currentDayOfCycle}</div>
+                    <h2 className="text-4xl lg:text-5xl font-black text-slate-800 dark:text-white mb-2 tracking-tight">Fase <span className={cycleInfo.phase === "Menstruasi" ? "text-red-500" : cycleInfo.phase === "Paska Menstruasi" ? "text-pink-500" : cycleInfo.phase === "Ovulasi" ? "text-amber-500" : "text-purple-500"}>{cycleInfo.phase}</span></h2>
+                    <p className="text-slate-600 dark:text-slate-300 text-lg mb-6 leading-relaxed">{currentTips.quote}</p>
+                    <div className="inline-flex items-center gap-3 bg-pink-50 dark:bg-slate-700/50 p-4 rounded-2xl w-full md:w-auto">
+                        <div className="bg-white dark:bg-slate-600 p-2 rounded-xl shadow-sm"><CalendarHeart size={24} className="text-pink-500" /></div>
+                        <div className="text-left">
+                        <p className="text-xs text-slate-500 dark:text-slate-400 font-medium uppercase tracking-wider">Estimasi Haid Berikutnya</p>
+                        <p className="font-bold text-slate-800 dark:text-white">Dalam <span className="text-pink-500 text-xl">{cycleInfo.daysUntilNextPeriod}</span> Hari</p>
+                        </div>
+                    </div>
+                    </div>
 
-          <section id="page-stats" class="page stack hidden">
-            <div><h1 class="page-title">Statistik</h1><div class="muted">Dihitung dari riwayat menstruasi aktual yang kamu catat.</div></div>
-            <div class="grid g3">
-              <article class="card"><div class="muted">Rata-rata siklus</div><div id="avgCycle" class="metric">—</div><div class="small">hari</div></article>
-              <article class="card"><div class="muted">Rata-rata menstruasi</div><div id="avgPeriod" class="metric">—</div><div class="small">hari</div></article>
-              <article class="card"><div class="muted">Siklus tercatat</div><div id="cyclesCount" class="metric">0</div><div class="small">interval yang bisa dihitung</div></article>
-            </div>
-            <article class="card">
-              <h3>Riwayat menstruasi</h3>
-              <div id="historyList" class="history" style="margin-top:14px"></div>
-            </article>
-          </section>
-
-          <section id="page-settings" class="page stack hidden">
-            <div><h1 class="page-title">Pengaturan</h1><div class="muted">Perubahan tersinkron ke akun Supabase.</div></div>
-            <article class="card">
-              <form id="settingsForm">
-                <div class="form-grid">
-                  <div><label class="label">Nama panggilan</label><input id="settingsName" class="input" maxlength="50" required></div>
-                  <div><label class="label">Umur</label><input id="settingsAge" class="input" type="number" min="10" max="80" required></div>
-                  <div><label class="label">Tanggal haid terakhir / baseline</label><input id="settingsLastPeriod" class="input" type="date" required></div>
-                  <div><label class="label">Panjang siklus default</label><input id="settingsCycle" class="input" type="number" min="21" max="35" required></div>
-                  <div><label class="label">Lama menstruasi default</label><input id="settingsPeriod" class="input" type="number" min="3" max="10" required></div>
+                    <div className="relative z-10 w-48 h-48 md:w-64 md:h-64 flex-shrink-0">
+                    <div className="w-full h-full bg-gradient-to-br from-white to-pink-50 dark:from-slate-700 dark:to-slate-600 rounded-full border-8 border-white dark:border-slate-800 shadow-xl flex items-center justify-center relative overflow-hidden">
+                        {cycleInfo.phase === "Menstruasi" && <Droplet size={80} className="text-red-500 fill-red-500 drop-shadow-md" />}
+                        {cycleInfo.phase === "Paska Menstruasi" && <BatteryCharging size={80} className="text-pink-400 drop-shadow-md" />}
+                        {cycleInfo.phase === "Ovulasi" && <EggIcon size={80} className="text-yellow-400 fill-yellow-400 drop-shadow-md" />}
+                        {cycleInfo.phase === "Pra Menstruasi" && <Wind size={80} className="text-purple-400 drop-shadow-md" />}
+                        <div className="absolute top-2 right-2 w-12 h-12 bg-white dark:bg-slate-800 rounded-full shadow-lg flex items-center justify-center animate-bounce"><Heart size={20} className="text-pink-500 fill-pink-500" /></div>
+                    </div>
+                    </div>
                 </div>
-                <button class="btn btn-primary" style="margin-top:14px">Simpan pengaturan</button>
-              </form>
-            </article>
 
-            <article class="card danger-zone">
-              <h3>Privasi & akun</h3>
-              <p class="muted">Logout tidak menghapus data. Data tetap di database dan muncul kembali setelah login.</p>
-              <button id="settingsLogout" class="btn btn-danger">Keluar dari akun</button>
-            </article>
-          </section>
-        </div>
-      </main>
-    </div>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                    <div className="bg-white dark:bg-slate-800 p-6 rounded-3xl shadow-sm border border-pink-100 dark:border-slate-700 flex flex-col justify-center">
+                    <h3 className="font-bold text-slate-800 dark:text-pink-100 flex items-center gap-2 mb-4"><Smile size={20} className="text-amber-400" /> Mood Kamu Hari Ini?</h3>
+                    <div className="flex justify-between gap-2">
+                        {[{ icon: Frown, label: "Sedih", color: "text-blue-400", bg: "bg-blue-50 dark:bg-blue-900/30" }, { icon: Wind, label: "Cemas", color: "text-purple-400", bg: "bg-purple-50 dark:bg-purple-900/30" }, { icon: Heart, label: "Biasa", color: "text-pink-400", bg: "bg-pink-50 dark:bg-pink-900/30" }, { icon: Smile, label: "Senang", color: "text-amber-400", bg: "bg-amber-50 dark:bg-amber-900/30" }, { icon: Sparkles, label: "Ceria", color: "text-yellow-400", bg: "bg-yellow-50 dark:bg-yellow-900/30" }].map((mood, idx) => (
+                        <button key={idx} onClick={() => handleMoodClick(idx)} className={`flex flex-col items-center p-3 rounded-2xl transition-all flex-1 ${currentMood === idx ? `${mood.bg} ring-2 ring-pink-200 dark:ring-slate-600 scale-105 shadow-sm` : 'hover:bg-slate-50 dark:hover:bg-slate-700 opacity-60 hover:opacity-100 grayscale hover:grayscale-0'}`}>
+                            <mood.icon size={28} className={mood.color} />
+                            <span className="text-[10px] sm:text-xs font-medium mt-2 text-slate-600 dark:text-slate-300">{mood.label}</span>
+                        </button>
+                        ))}
+                    </div>
+                    {cheeringMessage && (
+                        <div key={messageKey} className="mt-4 p-4 bg-gradient-to-r from-pink-50 to-purple-50 dark:from-slate-700 dark:to-slate-700 border border-pink-100 dark:border-slate-600 rounded-2xl animate-in zoom-in-95 fade-in duration-300">
+                        <p className="text-sm text-slate-700 dark:text-slate-200 text-center font-medium italic">"{cheeringMessage}"</p>
+                        </div>
+                    )}
+                    </div>
+                    <WaterTracker />
+                </div>
+                <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                    <div className="bg-white dark:bg-slate-800 p-6 rounded-3xl shadow-sm border border-pink-100 dark:border-slate-700">
+                    <h3 className="text-xl font-bold text-slate-800 dark:text-white mb-6 flex items-center gap-2"><Apple size={24} className="text-green-500" /> Saran Nutrisi</h3>
+                    <div className="space-y-6">
+                        <div>
+                        <h4 className="flex items-center gap-2 text-green-600 dark:text-green-400 font-semibold mb-3"><CheckCircle2 size={18} /> Dianjurkan</h4>
+                        <ul className="space-y-2">{currentTips.dos.map((item, idx) => (<li key={idx} className="flex items-start gap-2 text-slate-600 dark:text-slate-300 text-sm"><span className="text-green-400 mt-0.5">•</span> {item}</li>))}</ul>
+                        </div>
+                        <div className="bg-slate-100 dark:bg-slate-700/50 h-px w-full my-2"></div>
+                        <div>
+                        <h4 className="flex items-center gap-2 text-red-500 font-semibold mb-3"><Ban size={18} /> Hindari Dulu</h4>
+                        <ul className="space-y-2">{currentTips.donts.map((item, idx) => (<li key={idx} className="flex items-start gap-2 text-slate-600 dark:text-slate-300 text-sm"><span className="text-red-400 mt-0.5">•</span> {item}</li>))}</ul>
+                        </div>
+                    </div>
+                    </div>
 
-    <nav class="mobile-nav" id="mobileNav">
-      <button data-page="dashboard" class="active"><span>⌂</span>Beranda</button>
-      <button data-page="calendar"><span>▦</span>Kalender</button>
-      <button data-page="journal"><span>✎</span>Jurnal</button>
-      <button data-page="stats"><span>↗</span>Statistik</button>
-      <button data-page="settings"><span>⚙</span>Setelan</button>
-    </nav>
-  </section>
+                    <div className="bg-white dark:bg-slate-800 p-6 rounded-3xl shadow-sm border border-pink-100 dark:border-slate-700">
+                    <h3 className="text-xl font-bold text-slate-800 dark:text-white mb-6 flex items-center gap-2"><Activity size={24} className="text-blue-500" /> Olahraga & Aktivitas</h3>
+                    <div className="space-y-6">
+                        <div className="bg-blue-50 dark:bg-blue-900/20 p-4 rounded-2xl border border-blue-100 dark:border-blue-900/30">
+                        <h4 className="flex items-center gap-2 text-blue-600 dark:text-blue-400 font-semibold mb-3 text-sm uppercase tracking-wide">🏃‍♀️ Olahraga Terbaik</h4>
+                        <ul className="space-y-2">{currentTips.exercise.map((item, idx) => (<li key={idx} className="flex items-center gap-2 text-slate-700 dark:text-slate-200 text-sm font-medium"><div className="w-1.5 h-1.5 rounded-full bg-blue-400"></div> {item}</li>))}</ul>
+                        </div>
+                        <div className="bg-purple-50 dark:bg-purple-900/20 p-4 rounded-2xl border border-purple-100 dark:border-purple-900/30">
+                        <h4 className="flex items-center gap-2 text-purple-600 dark:text-purple-400 font-semibold mb-3 text-sm uppercase tracking-wide">💆‍♀️ Aktivitas Relaksasi</h4>
+                        <ul className="space-y-2">{currentTips.activity.map((item, idx) => (<li key={idx} className="flex items-center gap-2 text-slate-700 dark:text-slate-200 text-sm font-medium"><div className="w-1.5 h-1.5 rounded-full bg-purple-400"></div> {item}</li>))}</ul>
+                        </div>
+                    </div>
+                    </div>
+                </div>
+                </div>
+            );
 
-<script>
-(() => {
-  'use strict';
+            const KalenderView = () => {
+                const daysInMonth = new Date(currentYear, currentMonth + 1, 0).getDate();
+                const firstDayIndex = new Date(currentYear, currentMonth, 1).getDay();
+                const monthNames = ["Januari", "Februari", "Maret", "April", "Mei", "Juni", "Juli", "Agustus", "September", "Oktober", "November", "Desember"];
+                const dayNames = ["Min", "Sen", "Sel", "Rab", "Kam", "Jum", "Sab"];
+            
+                const prevMonth = () => { if (currentMonth === 0) { setCurrentMonth(11); setCurrentYear(currentYear - 1); } else { setCurrentMonth(currentMonth - 1); } };
+                const nextMonth = () => { if (currentMonth === 11) { setCurrentMonth(0); setCurrentYear(currentYear + 1); } else { setCurrentMonth(currentMonth + 1); } };
+            
+                return (
+                <div className="animate-in fade-in slide-in-from-bottom-4 duration-500 bg-white dark:bg-slate-800 p-6 md:p-8 rounded-[2.5rem] shadow-sm border border-pink-100 dark:border-slate-700">
+                    <div className="flex justify-between items-center mb-8">
+                    <h2 className="text-2xl font-bold text-slate-800 dark:text-white flex items-center gap-2"><Calendar size={28} className="text-pink-500" /> Kalender Siklus</h2>
+                    <div className="flex items-center gap-4 bg-pink-50 dark:bg-slate-700 p-2 rounded-2xl">
+                        <button onClick={prevMonth} className="p-2 hover:bg-white dark:hover:bg-slate-600 rounded-xl transition-colors text-slate-600 dark:text-slate-300"><ChevronLeft size={20} /></button>
+                        <span className="font-bold w-32 text-center text-slate-700 dark:text-slate-200">{monthNames[currentMonth]} {currentYear}</span>
+                        <button onClick={nextMonth} className="p-2 hover:bg-white dark:hover:bg-slate-600 rounded-xl transition-colors text-slate-600 dark:text-slate-300"><ChevronRight size={20} /></button>
+                    </div>
+                    </div>
+                    <div className="flex flex-wrap gap-4 md:gap-6 mb-8 justify-center text-sm bg-slate-50 dark:bg-slate-700/50 p-4 rounded-2xl">
+                    <div className="flex items-center gap-2"><div className="w-6 h-6 rounded-full bg-red-100 flex items-center justify-center"><Droplet size={14} className="text-red-500 fill-red-500" /></div><span className="text-slate-600 dark:text-slate-300 font-medium">Menstruasi</span></div>
+                    <div className="flex items-center gap-2"><div className="w-6 h-6 rounded-full bg-yellow-100 flex items-center justify-center"><EggIcon size={14} className="text-yellow-500 fill-yellow-400" /></div><span className="text-slate-600 dark:text-slate-300 font-medium">Ovulasi</span></div>
+                    <div className="flex items-center gap-2"><div className="w-6 h-6 rounded-full bg-purple-100 flex items-center justify-center"><div className="w-2 h-2 rounded-full bg-purple-500"></div></div><span className="text-slate-600 dark:text-slate-300 font-medium">PMS</span></div>
+                    </div>
+                    <div className="grid grid-cols-7 gap-2 md:gap-4 mb-4 text-center">
+                    {dayNames.map(day => (<div key={day} className="font-bold text-slate-400 dark:text-slate-500 text-xs md:text-sm uppercase pb-2">{day}</div>))}
+                    {Array.from({ length: firstDayIndex }).map((_, idx) => (<div key={`empty-${idx}`} className="h-14 md:h-20"></div>))}
+                    {Array.from({ length: daysInMonth }).map((_, idx) => {
+                        const dayNumber = idx + 1;
+                        const dateStr = `${currentYear}-${String(currentMonth + 1).padStart(2, '0')}-${String(dayNumber).padStart(2, '0')}`;
+                        const phaseData = getPhaseForDate(dateStr, lastPeriodDate, cycleLength, periodLength);
+                        const isToday = new Date().toDateString() === new Date(currentYear, currentMonth, dayNumber).toDateString();
+                        return (
+                        <div key={dayNumber} className={`relative flex flex-col items-center justify-center h-14 md:h-20 rounded-2xl transition-all cursor-pointer hover:ring-2 hover:ring-pink-300 ${phaseData.bgLight} ${isToday ? 'ring-2 ring-slate-800 dark:ring-white scale-105 shadow-md font-black' : 'font-semibold'}`}>
+                            <span className={`text-sm md:text-lg z-10 ${phaseData.text}`}>{dayNumber}</span>
+                            <div className="absolute bottom-1.5 md:bottom-2 flex gap-1">
+                            {phaseData.phase === "Menstruasi" && <Droplet size={14} className="text-red-500 fill-red-500" />}
+                            {phaseData.phase === "Ovulasi" && <EggIcon size={14} className="text-yellow-500 fill-yellow-400" />}
+                            {phaseData.phase === "Pra Menstruasi" && <div className="w-1.5 h-1.5 md:w-2 md:h-2 rounded-full bg-purple-500 opacity-70"></div>}
+                            </div>
+                        </div>
+                        );
+                    })}
+                    </div>
+                </div>
+                );
+            };
 
-  const SUPABASE_URL = 'https://ngozrhauqxasjucjfmhi.supabase.co';
-  const SUPABASE_PUBLISHABLE_KEY = 'sb_publishable_5cGp9RFl3FIKfEuoheEgyg_q8fim9sW';
+            const StatistikView = () => {
+                const pastCycles = [28, 29, 27, 30, 28, cycleLength];
+                const avgCycle = Math.round(pastCycles.reduce((a,b)=>a+b,0) / pastCycles.length);
 
-  const db = window.supabase.createClient(SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY, {
-    auth: { persistSession: true, autoRefreshToken: true, detectSessionInUrl: true }
-  });
+                return (
+                <div className="animate-in fade-in slide-in-from-bottom-4 duration-500 space-y-6">
+                    <h2 className="text-2xl font-bold text-slate-800 dark:text-white flex items-center gap-2 px-2"><TrendingUp size={28} className="text-pink-500" /> Statistik Kesehatan</h2>
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                    <div className="bg-gradient-to-br from-pink-400 to-rose-400 rounded-3xl p-6 text-white shadow-md">
+                        <p className="text-pink-100 font-medium text-sm mb-1">Rata-rata Siklus</p>
+                        <div className="flex items-end gap-2"><span className="text-4xl font-black">{avgCycle}</span><span className="text-pink-100 mb-1">Hari</span></div>
+                        <p className="text-xs mt-4 bg-white/20 inline-block px-3 py-1 rounded-full backdrop-blur-sm">Normal & Teratur</p>
+                    </div>
+                    <div className="bg-gradient-to-br from-fuchsia-400 to-purple-500 rounded-3xl p-6 text-white shadow-md">
+                        <p className="text-fuchsia-100 font-medium text-sm mb-1">Rata-rata Haid</p>
+                        <div className="flex items-end gap-2"><span className="text-4xl font-black">{periodLength}</span><span className="text-fuchsia-100 mb-1">Hari</span></div>
+                        <p className="text-xs mt-4 bg-white/20 inline-block px-3 py-1 rounded-full backdrop-blur-sm">Sehat</p>
+                    </div>
+                    <div className="bg-gradient-to-br from-blue-400 to-cyan-400 rounded-3xl p-6 text-white shadow-md">
+                        <p className="text-blue-100 font-medium text-sm mb-1">Skor Hidrasi Bulan Ini</p>
+                        <div className="flex items-end gap-2"><span className="text-4xl font-black">85</span><span className="text-blue-100 mb-1">%</span></div>
+                        <p className="text-xs mt-4 bg-white/20 inline-block px-3 py-1 rounded-full backdrop-blur-sm">Sangat Baik 💧</p>
+                    </div>
+                    </div>
+                    <div className="bg-white dark:bg-slate-800 p-6 md:p-8 rounded-[2.5rem] shadow-sm border border-pink-100 dark:border-slate-700">
+                    <h3 className="font-bold text-slate-800 dark:text-white mb-6">Riwayat Panjang Siklus (6 Bulan)</h3>
+                    <div className="h-48 flex items-end justify-between gap-2 md:gap-4 mt-8 px-4">
+                        {pastCycles.map((val, idx) => {
+                        const heightPct = Math.min((val / 35) * 100, 100);
+                        const isCurrent = idx === pastCycles.length - 1;
+                        return (
+                            <div key={idx} className="flex flex-col items-center flex-1 group">
+                            <div className="opacity-0 group-hover:opacity-100 transition-opacity text-xs font-bold text-slate-600 dark:text-slate-300 mb-2">{val} hr</div>
+                            <div className={`w-full max-w-[40px] rounded-t-xl transition-all duration-700 ${isCurrent ? 'bg-pink-500 shadow-md' : 'bg-pink-200 dark:bg-slate-600 group-hover:bg-pink-300 dark:group-hover:bg-slate-500'}`} style={{ height: `${heightPct}%` }}></div>
+                            <div className="text-xs text-slate-400 mt-3 font-medium">Bln {idx+1}</div>
+                            </div>
+                        )
+                        })}
+                    </div>
+                    </div>
+                </div>
+                );
+            };
 
-  const $ = (id) => document.getElementById(id);
-  const today = () => {
-    const d = new Date();
-    return [d.getFullYear(), String(d.getMonth()+1).padStart(2,'0'), String(d.getDate()).padStart(2,'0')].join('-');
-  };
-  const parseDate = (s) => {
-    if (!s) return null;
-    const [y,m,d] = s.split('-').map(Number);
-    return new Date(y,m-1,d);
-  };
-  const dateStr = (d) => [d.getFullYear(), String(d.getMonth()+1).padStart(2,'0'), String(d.getDate()).padStart(2,'0')].join('-');
-  const addDays = (d, n) => { const x = new Date(d); x.setDate(x.getDate()+n); return x; };
-  const daysBetween = (a,b) => Math.round((parseDate(b)-parseDate(a))/86400000);
-  const fmt = (s, opts={day:'numeric',month:'short',year:'numeric'}) => parseDate(s)?.toLocaleDateString('id-ID',opts) || '—';
-  const clamp = (n,a,b) => Math.min(b,Math.max(a,n));
+            const ArtikelView = () => {
+                if (selectedArticle) {
+                return (
+                    <div className="animate-in slide-in-from-right-8 duration-300 bg-white dark:bg-slate-800 rounded-[2.5rem] p-6 md:p-10 shadow-sm border border-pink-100 dark:border-slate-700">
+                    <button onClick={() => setSelectedArticle(null)} className="flex items-center gap-2 text-slate-500 hover:text-pink-500 font-medium mb-8 transition-colors bg-slate-50 dark:bg-slate-700/50 px-4 py-2 rounded-xl"><ArrowLeft size={20} /> Kembali ke Daftar</button>
+                    <div className="flex items-center gap-3 mb-6">
+                        <div className="bg-pink-100 dark:bg-slate-700 p-3 rounded-2xl text-pink-500"><selectedArticle.icon size={32} /></div>
+                        <div>
+                        <span className="text-xs font-bold text-purple-500 dark:text-purple-400 uppercase tracking-wider">{selectedArticle.category}</span>
+                        <span className="text-xs text-slate-400 ml-3 flex items-center gap-1 inline-flex"><Clock size={12}/> {selectedArticle.time}</span>
+                        </div>
+                    </div>
+                    <h2 className="text-3xl md:text-4xl font-black text-slate-800 dark:text-white mb-8 leading-tight">{selectedArticle.title}</h2>
+                    <div className="space-y-6 text-slate-600 dark:text-slate-300 text-lg leading-relaxed">
+                        {selectedArticle.content.map((paragraph, idx) => (<p key={idx}>{paragraph}</p>))}
+                    </div>
+                    </div>
+                );
+                }
 
-  const state = {
-    session:null, user:null, profile:null, settings:null, daily:null,
-    periods:[], currentPage:'dashboard', calendarDate:new Date(), symptoms:new Set(), authMode:'login'
-  };
+                return (
+                <div className="animate-in fade-in slide-in-from-bottom-4 duration-500 space-y-6">
+                    <div className="flex items-center justify-between px-2">
+                    <h2 className="text-2xl font-bold text-slate-800 dark:text-white flex items-center gap-2"><BookOpen size={28} className="text-pink-500" /> Artikel Edukasi</h2>
+                    </div>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                    {articles.map((art) => (
+                        <div key={art.id} onClick={() => setSelectedArticle(art)} className="group bg-white dark:bg-slate-800 rounded-3xl p-6 shadow-sm border border-pink-100 dark:border-slate-700 hover:shadow-md hover:border-pink-300 dark:hover:border-pink-500 hover:-translate-y-1 transition-all cursor-pointer flex flex-col h-full">
+                        <div className="flex items-start gap-4 flex-1">
+                            <div className="bg-pink-50 dark:bg-slate-700 p-4 rounded-2xl group-hover:bg-pink-500 group-hover:text-white transition-colors text-pink-500"><art.icon size={28} /></div>
+                            <div className="flex-1">
+                                <div className="flex justify-between items-center mb-2">
+                                <span className="text-xs font-bold text-purple-500 dark:text-purple-400 uppercase tracking-wider">{art.category}</span>
+                                <span className="text-xs text-slate-400 flex items-center gap-1"><Clock size={12}/> {art.time}</span>
+                                </div>
+                                <h3 className="font-bold text-lg text-slate-800 dark:text-white leading-tight mb-2 group-hover:text-pink-500 transition-colors">{art.title}</h3>
+                                <p className="text-sm text-slate-600 dark:text-slate-400 line-clamp-2">{art.desc}</p>
+                            </div>
+                        </div>
+                        <div className="mt-4 pt-4 border-t border-slate-50 dark:border-slate-700 flex justify-end">
+                            <span className="text-sm font-semibold text-pink-500 flex items-center gap-1 group-hover:translate-x-1 transition-transform">Baca Selengkapnya <ChevronRight size={16}/></span>
+                        </div>
+                        </div>
+                    ))}
+                    </div>
+                </div>
+                );
+            };
+            return (
+                <div className="min-h-screen bg-pink-50/50 dark:bg-slate-900 font-sans text-slate-800 dark:text-slate-100 transition-colors duration-300 flex overflow-hidden">
+                {isSidebarOpen && (<div className="fixed inset-0 bg-pink-900/20 dark:bg-black/50 backdrop-blur-sm z-40 lg:hidden" onClick={() => setIsSidebarOpen(false)} />)}
+                
+                <aside className={`fixed lg:static inset-y-0 left-0 w-64 bg-white dark:bg-slate-800 shadow-xl lg:shadow-none lg:border-r border-pink-100 dark:border-slate-700 z-50 transform ${isSidebarOpen ? 'translate-x-0' : '-translate-x-full'} lg:translate-x-0 transition-transform duration-300 ease-in-out flex flex-col overflow-y-auto`}>
+                    <div className="p-6 flex items-center justify-between">
+                    <div className="flex items-center gap-2 text-pink-500 dark:text-pink-400"><CalendarHeart size={28} className="animate-pulse" /><h1 className="text-2xl font-black tracking-tight">Siklus<span className="text-pink-300">Ku</span></h1></div>
+                    <button className="lg:hidden text-slate-400 hover:text-pink-500" onClick={() => setIsSidebarOpen(false)}><X size={24} /></button>
+                    </div>
 
-  const moodData = [
-    ['😢','Sedih'],['😟','Cemas'],['😐','Biasa'],['😊','Senang'],['🤩','Semangat']
-  ];
-  const symptoms = ['Kram','Sakit kepala','Kembung','Jerawat','Nyeri payudara','Mual','Pegang pinggang','Keputihan','Mudah lelah'];
+                    <div className="px-6 py-4 space-y-6 flex-1">
+                    <div className="space-y-4">
+                        <h2 className="text-xs font-bold text-slate-400 dark:text-slate-500 uppercase tracking-wider">Pengaturan Siklus</h2>
+                        <div className="space-y-2">
+                        <label className="text-sm font-medium text-slate-600 dark:text-slate-300">Awal Haid Terakhir</label>
+                        <input type="date" max={todayString} value={lastPeriodDate} onChange={(e) => setLastPeriodDate(e.target.value)} className="w-full bg-pink-50 dark:bg-slate-700 border-none rounded-xl p-3 text-sm focus:ring-2 focus:ring-pink-400 outline-none text-slate-700 dark:text-slate-200 cursor-pointer" />
+                        </div>
+                        <div className="space-y-2">
+                        <label className="text-sm font-medium text-slate-600 dark:text-slate-300 flex justify-between"><span>Siklus</span><span className="text-pink-500 font-bold">{cycleLength} Hari</span></label>
+                        <input type="range" min="21" max="35" value={cycleLength} onChange={(e) => setCycleLength(parseInt(e.target.value))} className="w-full accent-pink-500" />
+                        </div>
+                        <div className="space-y-2">
+                        <label className="text-sm font-medium text-slate-600 dark:text-slate-300 flex justify-between"><span>Lama Haid</span><span className="text-pink-500 font-bold">{periodLength} Hari</span></label>
+                        <input type="range" min="3" max="10" value={periodLength} onChange={(e) => setPeriodLength(parseInt(e.target.value))} className="w-full accent-pink-500" />
+                        </div>
+                    </div>
+                    <hr className="border-pink-100 dark:border-slate-700" />
+                    <nav className="space-y-2">
+                        {[
+                        { id: 'beranda', icon: Activity, label: "Beranda" },
+                        { id: 'kalender', icon: Calendar, label: "Kalender" },
+                        { id: 'statistik', icon: TrendingUp, label: "Statistik Kesehatan" },
+                        { id: 'artikel', icon: BookOpen, label: "Artikel Edukasi" },
+                        ].map((item) => (
+                        <button key={item.id} onClick={() => { setActiveTab(item.id); setIsSidebarOpen(false); if(item.id !== 'artikel') setSelectedArticle(null); }} className={`w-full flex items-center gap-3 px-4 py-3 rounded-2xl transition-all ${activeTab === item.id ? 'bg-pink-500 text-white shadow-md shadow-pink-200 dark:shadow-none' : 'text-slate-600 dark:text-slate-400 hover:bg-pink-50 dark:hover:bg-slate-700 hover:text-pink-500'}`}>
+                            <item.icon size={20} /> <span className="font-medium">{item.label}</span>
+                        </button>
+                        ))}
+                    </nav>
+                    </div>
 
-  function showOnly(id){
-    ['loading','authScreen','onboardingScreen','appScreen'].forEach(x => $(x).classList.toggle('hidden', x!==id));
-  }
-  function notice(el, msg='', type='err'){
-    $(el).innerHTML = msg ? `<div class="notice ${type}">${escapeHtml(msg)}</div>` : '';
-  }
-  function escapeHtml(s=''){ return String(s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
-  function setSync(mode){
-    const el=$('syncState'); el.dataset.state=mode;
-    el.textContent = mode==='syncing'?'● Menyimpan...':mode==='error'?'● Gagal sinkron':'● Tersimpan';
-  }
-  function authErrorMessage(msg=''){
-    const m=msg.toLowerCase();
-    if(m.includes('invalid login credentials')) return 'Email atau password salah.';
-    if(m.includes('email not confirmed')) return 'Email belum diverifikasi. Cek inbox email kamu.';
-    if(m.includes('user already registered')) return 'Email sudah terdaftar.';
-    if(m.includes('password should be')) return 'Password belum memenuhi panjang minimum.';
-    if(m.includes('rate limit')) return 'Terlalu banyak percobaan. Coba lagi beberapa saat.';
-    return msg || 'Terjadi kesalahan.';
-  }
+<a href="https://instagram.com/xdaniel04" target="_blank" rel="noopener noreferrer" class="menu-item instagram-link">
+    <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="menu-icon">
+        <rect x="2" y="2" width="20" height="20" rx="5" ry="5"></rect>
+        <path d="M16 11.37A4 4 0 1 1 12.63 8 4 4 0 0 1 16 11.37z"></path>
+        <line x1="17.5" y1="6.5" x2="17.51" y2="6.5"></line>
+    </svg>
+    <span>My Instagram</span>
+</a>
 
-  async function init(){
-    $('lastPeriod').max=today(); $('settingsLastPeriod').max=today();
-    renderStaticControls();
-    bindEvents();
 
-    const {data,error}=await db.auth.getSession();
-    if(error) console.error(error);
-    state.session=data?.session||null; state.user=state.session?.user||null;
+                    <div className="p-6 mt-auto">
+                    <button onClick={handleLogout} className="w-full flex items-center justify-center gap-2 text-red-500 bg-red-50 hover:bg-red-100 dark:bg-red-900/20 dark:hover:bg-red-900/40 py-3 rounded-2xl font-bold transition-colors">
+                        <LogOut size={18} /> Keluar dari Akun
+                    </button>
+                    </div>
+                </aside>
 
-    db.auth.onAuthStateChange(async(event,session)=>{
-      state.session=session; state.user=session?.user||null;
-      if(event==='PASSWORD_RECOVERY' && session){
-        const p=prompt('Masukkan password baru (minimal 6 karakter):');
-        if(p && p.length>=6){
-          const {error}=await db.auth.updateUser({password:p});
-          alert(error ? authErrorMessage(error.message) : 'Password berhasil diperbarui.');
-        }
-      }
-      if(event==='SIGNED_OUT'){
-        resetState(); showOnly('authScreen');
-      }
-    });
+                <main className="flex-1 flex flex-col h-screen overflow-hidden relative">
+                    <header className="h-20 flex items-center justify-between px-6 lg:px-10 bg-white/80 dark:bg-slate-900/80 backdrop-blur-md sticky top-0 z-30 border-b border-pink-100/50 dark:border-slate-800">
+                    <div className="flex items-center gap-4">
+                        <button onClick={() => setIsSidebarOpen(true)} className="lg:hidden p-2 text-slate-600 dark:text-slate-300 hover:bg-pink-50 dark:hover:bg-slate-800 rounded-xl"><Menu size={24} /></button>
+                        <h1 className="text-xl font-black text-slate-800 dark:text-white capitalize hidden sm:block">{activeTab === 'beranda' ? 'Dashboard' : activeTab}</h1>
+                    </div>
+                    <div className="flex items-center gap-4">
+                        <div className={`hidden md:flex items-center gap-2 px-3 py-1.5 rounded-full text-xs font-bold ${syncState === 'error' ? 'bg-red-50 dark:bg-red-900/20 text-red-500' : syncState === 'syncing' ? 'bg-amber-50 dark:bg-amber-900/20 text-amber-500' : 'bg-green-50 dark:bg-green-900/20 text-green-600 dark:text-green-400'}`} title="Status sinkronisasi Firebase">
+                            <span className={`w-2 h-2 rounded-full ${syncState === 'error' ? 'bg-red-500' : syncState === 'syncing' ? 'bg-amber-400 animate-pulse' : 'bg-green-500'}`}></span>
+                            {syncState === 'error' ? 'Gagal Sinkron' : syncState === 'syncing' ? 'Menyimpan...' : 'Tersimpan'}
+                        </div>
+                        <button onClick={() => setIsDarkMode(!isDarkMode)} className="p-2.5 bg-pink-50 dark:bg-slate-800 text-pink-500 dark:text-amber-300 rounded-full hover:scale-110 transition-transform shadow-sm">
+                        {isDarkMode ? <Sun size={20} /> : <Moon size={20} />}
+                        </button>
+                        <div className="w-10 h-10 rounded-full bg-gradient-to-tr from-pink-400 to-purple-400 border-2 border-white dark:border-slate-700 shadow-md flex items-center justify-center text-white font-bold text-sm cursor-pointer hover:ring-2 hover:ring-pink-300 transition-all uppercase" title={`${userName} (${userAge} th)`}>
+                        {userName ? userName.substring(0, 2) : "US"}
+                        </div>
+                    </div>
+                    </header>
 
-    if(state.session) await loadAccount();
-    else showOnly('authScreen');
-  }
+                    <div className="flex-1 overflow-y-auto p-4 sm:p-6 lg:p-10 pb-24 scroll-smooth">
+                    <div className="max-w-5xl mx-auto">
+                        {activeTab === 'beranda' && <BerandaView />}
+                        {activeTab === 'kalender' && <KalenderView />}
+                        {activeTab === 'statistik' && <StatistikView />}
+                        {activeTab === 'artikel' && <ArtikelView />}
+                    </div>
+                    </div>
+                </main>
+                </div>
+            );
+        };
 
-  function resetState(){
-    state.profile=null;state.settings=null;state.daily=null;state.periods=[];state.symptoms=new Set();
-  }
-
-  async function loadAccount(){
-    showOnly('loading');
-    const uid=state.user.id;
-    const d=today();
-
-    const [p,s,dl,ph]=await Promise.all([
-      db.from('profiles').select('*').eq('id',uid).maybeSingle(),
-      db.from('cycle_settings').select('*').eq('user_id',uid).maybeSingle(),
-      db.from('daily_logs').select('*').eq('user_id',uid).eq('log_date',d).maybeSingle(),
-      db.from('period_logs').select('*').eq('user_id',uid).order('start_date',{ascending:false})
-    ]);
-
-    const err=p.error||s.error||dl.error||ph.error;
-    if(err){
-      console.error(err);
-      showOnly('authScreen');
-      notice('authNotice','Database belum siap. Jalankan siklusku_supabase_setup.sql di SQL Editor Supabase, lalu reload.','err');
-      return;
-    }
-
-    state.profile=p.data;
-    state.settings=s.data;
-    state.daily=dl.data||{mood:null,water_glasses:0,flow:null,pain_level:0,energy_level:5,sleep_quality:5,symptoms:[],notes:''};
-    state.periods=ph.data||[];
-    state.symptoms=new Set(state.daily.symptoms||[]);
-
-    if(!state.profile?.onboarding_completed || !state.settings){
-      fillOnboarding();
-      showOnly('onboardingScreen');
-      return;
-    }
-
-    renderAll();
-    showOnly('appScreen');
-  }
-
-  function fillOnboarding(){
-    $('displayName').value=state.profile?.display_name||'';
-    $('age').value=state.profile?.age||'';
-    const last=localStorage.getItem('siklusku_lastPeriod')||dateStr(addDays(new Date(),-2));
-    $('lastPeriod').value=last;
-    $('cycleLength').value=Number(localStorage.getItem('siklusku_cycle'))||28;
-    $('periodLength').value=Number(localStorage.getItem('siklusku_period'))||5;
-  }
-
-  function renderStaticControls(){
-    $('moodButtons').innerHTML=moodData.map((m,i)=>`<button type="button" class="mood" data-mood="${i}"><span class="emoji">${m[0]}</span><span class="small">${m[1]}</span></button>`).join('');
-    $('waterButtons').innerHTML=Array.from({length:8},(_,i)=>`<button type="button" class="glass" data-water="${i+1}">💧 ${i+1}</button>`).join('');
-    $('symptomChips').innerHTML=symptoms.map(s=>`<button type="button" class="chip" data-symptom="${escapeHtml(s)}">${escapeHtml(s)}</button>`).join('');
-  }
-
-  function bindEvents(){
-    $('toggleAuth').onclick=()=>{
-      state.authMode=state.authMode==='login'?'register':'login'; renderAuthMode();
-    };
-    $('forgotBtn').onclick=forgotPassword;
-    $('authForm').onsubmit=submitAuth;
-    $('onboardForm').onsubmit=saveOnboarding;
-    $('onboardLogout').onclick=logout;
-    $('logoutBtn').onclick=logout;
-    $('settingsLogout').onclick=logout;
-    $('settingsForm').onsubmit=saveSettings;
-    $('journalForm').onsubmit=saveJournal;
-    $('periodActionBtn').onclick=togglePeriod;
-
-    document.querySelectorAll('[data-page]').forEach(b=>b.addEventListener('click',()=>navigate(b.dataset.page)));
-    document.querySelectorAll('[data-mood]').forEach(b=>b.addEventListener('click',()=>saveMood(Number(b.dataset.mood))));
-    document.querySelectorAll('[data-water]').forEach(b=>b.addEventListener('click',()=>saveWater(Number(b.dataset.water))));
-    document.querySelectorAll('[data-symptom]').forEach(b=>b.addEventListener('click',()=>toggleSymptom(b.dataset.symptom)));
-
-    $('pain').oninput=()=> $('painVal').textContent=$('pain').value;
-    $('energy').oninput=()=> $('energyVal').textContent=$('energy').value;
-    $('sleep').oninput=()=> $('sleepVal').textContent=$('sleep').value;
-    $('prevMonth').onclick=()=>{state.calendarDate=new Date(state.calendarDate.getFullYear(),state.calendarDate.getMonth()-1,1);renderCalendar()};
-    $('nextMonth').onclick=()=>{state.calendarDate=new Date(state.calendarDate.getFullYear(),state.calendarDate.getMonth()+1,1);renderCalendar()};
-  }
-
-  function renderAuthMode(){
-    const reg=state.authMode==='register';
-    $('authTitle').textContent=reg?'Buat akun SiklusKu':'Masuk ke akun';
-    $('authSubtitle').textContent=reg?'Daftar agar data tidak hilang saat cache browser dihapus atau saat pindah perangkat.':'Masuk untuk memulihkan data SiklusKu dari cloud.';
-    $('authSubmit').textContent=reg?'Daftar':'Masuk';
-    $('toggleAuth').textContent=reg?'Sudah punya akun?':'Belum punya akun?';
-    $('forgotBtn').classList.toggle('hidden',reg);
-    notice('authNotice','');
-  }
-
-  async function submitAuth(e){
-    e.preventDefault(); notice('authNotice','');
-    const email=$('email').value.trim(), password=$('password').value;
-    $('authSubmit').disabled=true;
-    try{
-      if(state.authMode==='register'){
-        const {data,error}=await db.auth.signUp({email,password});
-        if(error) throw error;
-        if(!data.session){
-          notice('authNotice','Akun dibuat. Cek email untuk verifikasi, lalu masuk.','ok');
-          state.authMode='login';renderAuthMode();
-          notice('authNotice','Akun dibuat. Cek email untuk verifikasi, lalu masuk.','ok');
-        }
-      } else {
-        const {error}=await db.auth.signInWithPassword({email,password});
-        if(error) throw error;
-        const {data}=await db.auth.getSession();
-        state.session=data.session;state.user=data.session?.user;
-        await loadAccount();
-      }
-    }catch(err){ notice('authNotice',authErrorMessage(err.message),'err'); }
-    finally{$('authSubmit').disabled=false}
-  }
-
-  async function forgotPassword(){
-    const email=$('email').value.trim();
-    if(!email){notice('authNotice','Masukkan email akun terlebih dahulu.','err');return}
-    const {error}=await db.auth.resetPasswordForEmail(email,{redirectTo:location.origin+location.pathname});
-    notice('authNotice',error?authErrorMessage(error.message):'Link reset password dikirim ke email kamu.',error?'err':'ok');
-  }
-
-  async function saveOnboarding(e){
-    e.preventDefault();notice('onboardNotice','');
-    const uid=state.user.id;
-    const profile={id:uid,display_name:$('displayName').value.trim(),age:Number($('age').value),onboarding_completed:true,updated_at:new Date().toISOString()};
-    const settings={user_id:uid,last_period_date:$('lastPeriod').value,cycle_length:Number($('cycleLength').value),period_length:Number($('periodLength').value),theme:'light',updated_at:new Date().toISOString()};
-    if(!profile.display_name || profile.age<10 || profile.age>80){notice('onboardNotice','Periksa nama dan umur.','err');return}
-
-    const p=await db.from('profiles').upsert(profile,{onConflict:'id'});
-    if(p.error){notice('onboardNotice',p.error.message,'err');return}
-    const s=await db.from('cycle_settings').upsert(settings,{onConflict:'user_id'});
-    if(s.error){notice('onboardNotice',s.error.message,'err');return}
-
-    ['siklusku_name','siklusku_age','siklusku_lastPeriod','siklusku_cycle','siklusku_period'].forEach(k=>localStorage.removeItem(k));
-    await loadAccount();
-  }
-
-  function navigate(page){
-    state.currentPage=page;
-    document.querySelectorAll('.page').forEach(p=>p.classList.add('hidden'));
-    $('page-'+page).classList.remove('hidden');
-    document.querySelectorAll('[data-page]').forEach(b=>b.classList.toggle('active',b.dataset.page===page));
-    if(page==='calendar') renderCalendar();
-    if(page==='stats') renderStats();
-  }
-
-  function getCycleModel(){
-    const periods=[...state.periods].sort((a,b)=>a.start_date.localeCompare(b.start_date));
-    const intervals=[];
-    for(let i=1;i<periods.length;i++){
-      const v=daysBetween(periods[i-1].start_date,periods[i].start_date);
-      if(v>=15 && v<=60) intervals.push(v);
-    }
-    const avg=intervals.length?Math.round(intervals.reduce((a,b)=>a+b,0)/intervals.length):Number(state.settings?.cycle_length||28);
-    const lastActual=periods.length?periods[periods.length-1].start_date:state.settings?.last_period_date;
-    const next=lastActual?dateStr(addDays(parseDate(lastActual),avg)):null;
-    return {periods,intervals,avg,lastActual,next};
-  }
-
-  function renderAll(){
-    const name=state.profile?.display_name||'Pengguna';
-    $('hello').textContent=`Halo, ${name} 👋`;
-    $('sidebarUser').textContent=name;
-    $('sidebarEmail').textContent=state.user?.email||'';
-    fillSettings();
-    fillJournal();
-    renderDashboard();
-    renderCalendar();
-    renderStats();
-  }
-
-  function renderDashboard(){
-    const model=getCycleModel(), d=today();
-    let cycleDay='—', phase='Belum cukup data';
-    if(model.lastActual){
-      const diff=daysBetween(model.lastActual,d);
-      cycleDay=diff>=0?(diff%model.avg)+1:'—';
-      const pd=Number(state.settings?.period_length||5);
-      if(typeof cycleDay==='number'){
-        if(cycleDay<=pd) phase='Menstruasi / awal siklus';
-        else if(cycleDay>=model.avg-7) phase='Menjelang estimasi haid';
-        else phase='Di antara periode menstruasi';
-      }
-    }
-    $('cycleDayMetric').textContent=cycleDay;
-    $('phaseText').textContent=phase;
-    $('nextPeriodMetric').textContent=model.next?fmt(model.next,{day:'numeric',month:'short'}):'—';
-    $('predictionBasis').textContent=model.intervals.length>=2?`Berdasarkan rata-rata ${model.intervals.length} interval aktual.`:'Estimasi awal memakai panjang siklus default.';
-    $('periodCountMetric').textContent=state.periods.length;
-
-    const active=state.periods.find(p=>!p.end_date);
-    $('periodActionBtn').textContent=active?'Akhiri haid hari ini':'Mulai haid hari ini';
-    $('periodActionBtn').className='btn '+(active?'btn-soft':'btn-primary');
-    $('periodStatusText').textContent=active?`Aktif sejak ${fmt(active.start_date)}.`:'Belum ada menstruasi aktif.';
-
-    renderMoodWater();
-  }
-
-  function renderMoodWater(){
-    const mood=state.daily?.mood;
-    document.querySelectorAll('[data-mood]').forEach(b=>b.classList.toggle('active',Number(b.dataset.mood)===Number(mood)));
-    const water=Number(state.daily?.water_glasses||0);
-    $('waterCount').textContent=water;
-    document.querySelectorAll('[data-water]').forEach(b=>b.classList.toggle('on',Number(b.dataset.water)<=water));
-  }
-
-  async function upsertDaily(patch){
-    setSync('syncing');
-    const payload={user_id:state.user.id,log_date:today(),...patch,updated_at:new Date().toISOString()};
-    const {data,error}=await db.from('daily_logs').upsert(payload,{onConflict:'user_id,log_date'}).select().single();
-    if(error){console.error(error);setSync('error');return false}
-    state.daily=data; state.symptoms=new Set(data.symptoms||[]);
-    setSync('synced'); return true;
-  }
-
-  async function saveMood(v){
-    await upsertDaily({mood:v});renderMoodWater();
-  }
-  async function saveWater(v){
-    const current=Number(state.daily?.water_glasses||0);
-    const next=current===v?v-1:v;
-    await upsertDaily({water_glasses:clamp(next,0,20)});renderMoodWater();
-  }
-
-  function fillJournal(){
-    const d=state.daily||{};
-    $('flow').value=d.flow||'';
-    $('pain').value=d.pain_level??0;$('painVal').textContent=$('pain').value;
-    $('energy').value=d.energy_level??5;$('energyVal').textContent=$('energy').value;
-    $('sleep').value=d.sleep_quality??5;$('sleepVal').textContent=$('sleep').value;
-    $('notes').value=d.notes||'';
-    state.symptoms=new Set(d.symptoms||[]);
-    renderSymptomChips();
-  }
-
-  function toggleSymptom(s){
-    state.symptoms.has(s)?state.symptoms.delete(s):state.symptoms.add(s);
-    renderSymptomChips();
-  }
-  function renderSymptomChips(){
-    document.querySelectorAll('[data-symptom]').forEach(b=>b.classList.toggle('active',state.symptoms.has(b.dataset.symptom)));
-  }
-
-  async function saveJournal(e){
-    e.preventDefault();
-    const ok=await upsertDaily({
-      flow:$('flow').value||null,
-      pain_level:Number($('pain').value),
-      energy_level:Number($('energy').value),
-      sleep_quality:Number($('sleep').value),
-      symptoms:[...state.symptoms],
-      notes:$('notes').value.trim()||null
-    });
-    if(ok){alert('Jurnal hari ini tersimpan.');fillJournal();renderCalendar()}
-  }
-
-  async function togglePeriod(){
-    const active=state.periods.find(p=>!p.end_date);
-    setSync('syncing');
-    let result;
-    if(active){
-      result=await db.from('period_logs').update({end_date:today(),updated_at:new Date().toISOString()}).eq('id',active.id).eq('user_id',state.user.id);
-    } else {
-      result=await db.from('period_logs').insert({user_id:state.user.id,start_date:today()});
-      if(!result.error){
-        await db.from('cycle_settings').update({last_period_date:today(),updated_at:new Date().toISOString()}).eq('user_id',state.user.id);
-        state.settings.last_period_date=today();
-      }
-    }
-    if(result.error){console.error(result.error);setSync('error');alert(result.error.message);return}
-    const {data}=await db.from('period_logs').select('*').eq('user_id',state.user.id).order('start_date',{ascending:false});
-    state.periods=data||[];setSync('synced');renderDashboard();renderCalendar();renderStats();
-  }
-
-  function fillSettings(){
-    $('settingsName').value=state.profile?.display_name||'';
-    $('settingsAge').value=state.profile?.age||'';
-    $('settingsLastPeriod').value=state.settings?.last_period_date||today();
-    $('settingsCycle').value=state.settings?.cycle_length||28;
-    $('settingsPeriod').value=state.settings?.period_length||5;
-  }
-
-  async function saveSettings(e){
-    e.preventDefault();setSync('syncing');
-    const p=await db.from('profiles').update({
-      display_name:$('settingsName').value.trim(),age:Number($('settingsAge').value),updated_at:new Date().toISOString()
-    }).eq('id',state.user.id);
-    const s=await db.from('cycle_settings').update({
-      last_period_date:$('settingsLastPeriod').value,cycle_length:Number($('settingsCycle').value),period_length:Number($('settingsPeriod').value),updated_at:new Date().toISOString()
-    }).eq('user_id',state.user.id);
-    if(p.error||s.error){setSync('error');alert((p.error||s.error).message);return}
-    state.profile={...state.profile,display_name:$('settingsName').value.trim(),age:Number($('settingsAge').value)};
-    state.settings={...state.settings,last_period_date:$('settingsLastPeriod').value,cycle_length:Number($('settingsCycle').value),period_length:Number($('settingsPeriod').value)};
-    setSync('synced');renderAll();alert('Pengaturan tersimpan.');
-  }
-
-  function renderStats(){
-    const model=getCycleModel();
-    $('avgCycle').textContent=model.intervals.length?Math.round(model.intervals.reduce((a,b)=>a+b,0)/model.intervals.length):'—';
-    const durations=state.periods.filter(p=>p.end_date).map(p=>daysBetween(p.start_date,p.end_date)+1).filter(x=>x>0&&x<20);
-    $('avgPeriod').textContent=durations.length?Math.round(durations.reduce((a,b)=>a+b,0)/durations.length):'—';
-    $('cyclesCount').textContent=model.intervals.length;
-
-    if(!state.periods.length){$('historyList').innerHTML='<div class="empty">Belum ada riwayat menstruasi aktual.</div>';return}
-    $('historyList').innerHTML=state.periods.slice(0,12).map(p=>{
-      const dur=p.end_date?`${daysBetween(p.start_date,p.end_date)+1} hari`:'Sedang berlangsung';
-      return `<div class="history-item"><div><strong>${fmt(p.start_date)}</strong><div class="small">${p.end_date?'Selesai '+fmt(p.end_date):'Belum diakhiri'}</div></div><span class="pill ${p.end_date?'good':'wait'}">${dur}</span></div>`;
-    }).join('');
-  }
-
-  function renderCalendar(){
-    if(!state.settings)return;
-    const y=state.calendarDate.getFullYear(),m=state.calendarDate.getMonth();
-    $('monthTitle').textContent=new Date(y,m,1).toLocaleDateString('id-ID',{month:'long',year:'numeric'});
-    const first=new Date(y,m,1), last=new Date(y,m+1,0);
-    const mondayIndex=(first.getDay()+6)%7;
-    const start=addDays(first,-mondayIndex);
-    const cells=42;
-    const model=getCycleModel();
-    const predicted=model.next;
-    const journalDate=today();
-
-    let html='';
-    for(let i=0;i<cells;i++){
-      const d=addDays(start,i), s=dateStr(d);
-      const inMonth=d.getMonth()===m;
-      const actual=state.periods.some(p=>{
-        const end=p.end_date||today();
-        return s>=p.start_date && s<=end;
-      });
-      const pred=predicted===s;
-      const hasLog=journalDate===s && state.daily && (state.daily.mood!==null || Number(state.daily.water_glasses)>0 || state.daily.flow || state.daily.notes);
-      html+=`<div class="day ${inMonth?'':'other'} ${s===today()?'today':''}">
-        <div class="num">${d.getDate()}</div>
-        <div style="margin-top:8px">
-          ${actual?'<span class="dot period" title="Menstruasi aktual"></span>':''}
-          ${pred?'<span class="dot pred" title="Estimasi mulai haid"></span>':''}
-          ${hasLog?'<span class="dot log" title="Jurnal"></span>':''}
-        </div>
-      </div>`;
-    }
-    $('calendarGrid').innerHTML=html;
-  }
-
-  async function logout(){ await db.auth.signOut(); }
-
-  init().catch(err=>{
-    console.error(err);
-    showOnly('authScreen');
-    notice('authNotice','Aplikasi gagal dimuat: '+(err.message||err),'err');
-  });
-})();
-</script>
+        const root = ReactDOM.createRoot(document.getElementById('root'));
+        root.render(<App />);
+    </script>
 </body>
 </html>
