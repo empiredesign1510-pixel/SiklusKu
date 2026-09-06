@@ -3,8 +3,9 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover, interactive-widget=resizes-content">
-    <title>SiklusKu - Catatan Siklus Haid</title>
+    <title>SiklusKu 2.0 - Tracker Menstruasi & Kesehatan</title>
     
+    <!-- SiklusKu 2.0: gejala, tingkat nyeri, reminder notifikasi, grafik riwayat, edukasi & tanda bahaya -->
     <!-- Warna Tema PWA / Mobile -->
     <meta name="theme-color" content="#ec4899">
     <meta name="apple-mobile-web-app-capable" content="yes">
@@ -208,6 +209,11 @@
         const User = (p) => <LucideIcon d='<path d="M19 21v-2a4 4 0 0 0-4-4H9a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/>' {...p}/>;
         const ArrowRight = (p) => <LucideIcon d='<path d="M5 12h14"/><path d="m12 5 7 7-7 7"/>' {...p}/>;
         const LogOut = (p) => <LucideIcon d='<path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" x2="9" y1="12" y2="12"/>' {...p}/>;
+        const Bell = (p) => <LucideIcon d='<path d="M10.268 21a2 2 0 0 0 3.464 0"/><path d="M3.262 15.326A1 1 0 0 0 4 17h16a1 1 0 0 0 .74-1.673C19.41 13.956 18 12.499 18 8A6 6 0 0 0 6 8c0 4.499-1.411 5.956-2.738 7.326"/>' {...p}/>;
+        const ClipboardList = (p) => <LucideIcon d='<rect width="8" height="4" x="8" y="2" rx="1" ry="1"/><path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"/><path d="M9 12h6"/><path d="M9 16h6"/>' {...p}/>;
+        const Stethoscope = (p) => <LucideIcon d='<path d="M11 2v2"/><path d="M5 2v2"/><path d="M5 3H4a2 2 0 0 0-2 2v3a6 6 0 0 0 12 0V5a2 2 0 0 0-2-2h-1"/><path d="M8 15a6 6 0 0 0 12 0v-3"/><circle cx="20" cy="10" r="2"/>' {...p}/>;
+        const Save = (p) => <LucideIcon d='<path d="M15.2 3a2 2 0 0 1 1.4.6l3.8 3.8a2 2 0 0 1 .6 1.4V19a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2z"/><path d="M17 21v-8H7v8"/><path d="M7 3v5h8"/>' {...p}/>;
+        const Plus = (p) => <LucideIcon d='<path d="M5 12h14"/><path d="M12 5v14"/>' {...p}/>;
 
         const EggIcon = ({ className = "", size = 24 }) => (
             <svg viewBox="0 0 24 24" fill="currentColor" className={className} width={size} height={size}>
@@ -292,6 +298,23 @@
             const [currentYear, setCurrentYear] = useState(new Date().getFullYear());
             const [selectedArticle, setSelectedArticle] = useState(null);
 
+            // ---------- SIKLUSKU 2.0: HEALTH TRACKING ----------
+            const [dailySymptoms, setDailySymptoms] = useState([]);
+            const [painLevel, setPainLevel] = useState(0);
+            const [dailyNotes, setDailyNotes] = useState('');
+            const [dailyLogMessage, setDailyLogMessage] = useState('');
+            const [periodLogs, setPeriodLogs] = useState([]);
+            const [periodStartInput, setPeriodStartInput] = useState(getLocalDateString());
+            const [periodLogBusy, setPeriodLogBusy] = useState(false);
+
+            const [reminderEnabled, setReminderEnabled] = useState(false);
+            const [reminderDaysBefore, setReminderDaysBefore] = useState(2);
+            const [reminderTime, setReminderTime] = useState('08:00');
+            const [notificationPermission, setNotificationPermission] = useState(() => (
+                typeof Notification === 'undefined' ? 'unsupported' : Notification.permission
+            ));
+            const [reminderMessage, setReminderMessage] = useState('');
+
             const [tempName, setTempName] = useState(() => localStorage.getItem('siklusku_name') || '');
             const [tempAge, setTempAge] = useState(() => localStorage.getItem('siklusku_age') || '');
 
@@ -333,6 +356,10 @@
                         setUserAge('');
                         setWaterGlasses(0);
                         setCurrentMood(null);
+                        setDailySymptoms([]);
+                        setPainLevel(0);
+                        setDailyNotes('');
+                        setPeriodLogs([]);
                     }
                 }, (error) => {
                     setAuthError(friendlyAuthError(error));
@@ -359,9 +386,11 @@
                     try {
                         const userRef = firestoreDb.collection('users').doc(currentUserId);
                         const dailyRef = userRef.collection('dailyLogs').doc(todayString);
-                        const [userSnap, dailySnap] = await Promise.all([
+                        const periodQuery = userRef.collection('periodLogs').orderBy('startDate', 'asc').limit(24);
+                        const [userSnap, dailySnap, periodSnap] = await Promise.all([
                             userRef.get(),
-                            dailyRef.get()
+                            dailyRef.get(),
+                            periodQuery.get()
                         ]);
                         if (cancelled) return;
 
@@ -385,10 +414,17 @@
                             if (profile.cycleLength) setCycleLength(profile.cycleLength);
                             if (profile.periodLength) setPeriodLength(profile.periodLength);
                             if (profile.theme) setIsDarkMode(profile.theme === 'dark');
+                            if (typeof profile.reminderEnabled === 'boolean') setReminderEnabled(profile.reminderEnabled);
+                            if (profile.reminderDaysBefore !== undefined) setReminderDaysBefore(Number(profile.reminderDaysBefore));
+                            if (profile.reminderTime) setReminderTime(profile.reminderTime);
                         }
 
                         setCurrentMood(daily?.mood ?? null);
                         setWaterGlasses(daily?.waterGlasses ?? 0);
+                        setDailySymptoms(Array.isArray(daily?.symptoms) ? daily.symptoms : []);
+                        setPainLevel(Number(daily?.painLevel ?? 0));
+                        setDailyNotes(daily?.notes ?? '');
+                        setPeriodLogs(periodSnap.docs.map(doc => ({ id: doc.id, ...doc.data() })));
                         setProfileReady(true);
                         setSyncState('synced');
                     } catch (error) {
@@ -433,6 +469,9 @@
                             cycleLength,
                             periodLength,
                             theme: isDarkMode ? 'dark' : 'light',
+                            reminderEnabled,
+                            reminderDaysBefore,
+                            reminderTime,
                             updatedAt: firebase.firestore.FieldValue.serverTimestamp()
                         }, { merge: true });
                         setSyncState('synced');
@@ -443,7 +482,7 @@
                 }, 450);
 
                 return () => clearTimeout(timer);
-            }, [currentUserId, profileReady, showOnboarding, lastPeriodDate, cycleLength, periodLength, isDarkMode]);
+            }, [currentUserId, profileReady, showOnboarding, lastPeriodDate, cycleLength, periodLength, isDarkMode, reminderEnabled, reminderDaysBefore, reminderTime]);
 
             const handleAuthSubmit = async (e) => {
                 e.preventDefault();
@@ -524,6 +563,15 @@
                         updatedAt: firebase.firestore.FieldValue.serverTimestamp()
                     }, { merge: true });
 
+                    // Simpan titik awal riwayat agar grafik siklus bisa menggunakan data nyata.
+                    await firestoreDb.collection('users').doc(currentUserId)
+                        .collection('periodLogs').doc(lastPeriodDate).set({
+                            startDate: lastPeriodDate,
+                            source: 'onboarding',
+                            createdAt: firebase.firestore.FieldValue.serverTimestamp()
+                        }, { merge: true });
+                    setPeriodLogs([{ id: lastPeriodDate, startDate: lastPeriodDate, source: 'onboarding' }]);
+
                     if (session && !session.displayName) {
                         session.updateProfile({ displayName: tempName.trim() }).catch(() => {});
                     }
@@ -574,6 +622,97 @@
                     console.error('Gagal menyimpan jurnal harian Firebase:', error);
                     setSyncState('error');
                 }
+            };
+
+            const symptomOptions = [
+                { id: 'kram', label: 'Kram perut', emoji: '🤕' },
+                { id: 'nyeri_pinggang', label: 'Nyeri pinggang', emoji: '🩹' },
+                { id: 'sakit_kepala', label: 'Sakit kepala', emoji: '🤯' },
+                { id: 'kembung', label: 'Kembung', emoji: '🎈' },
+                { id: 'payudara_nyeri', label: 'Payudara terasa nyeri', emoji: '💗' },
+                { id: 'jerawat', label: 'Jerawat', emoji: '✨' },
+                { id: 'mual', label: 'Mual', emoji: '🤢' },
+                { id: 'kelelahan', label: 'Mudah lelah', emoji: '😴' },
+                { id: 'mood', label: 'Perubahan mood', emoji: '🎭' },
+                { id: 'spotting', label: 'Flek/spotting', emoji: '🩸' },
+                { id: 'diare', label: 'Diare', emoji: '💨' },
+                { id: 'konstipasi', label: 'Konstipasi', emoji: '🧘' }
+            ];
+
+            const toggleSymptom = (id) => {
+                setDailySymptoms(prev => prev.includes(id) ? prev.filter(item => item !== id) : [...prev, id]);
+                setDailyLogMessage('');
+            };
+
+            const saveHealthLog = async () => {
+                await saveDailyLog({
+                    symptoms: dailySymptoms,
+                    painLevel,
+                    notes: dailyNotes.trim(),
+                    healthLoggedAt: firebase.firestore.FieldValue.serverTimestamp()
+                });
+                setDailyLogMessage('Catatan gejala dan tingkat nyeri hari ini sudah tersimpan.');
+                window.setTimeout(() => setDailyLogMessage(''), 3500);
+            };
+
+            const savePeriodStart = async (dateValue = todayString) => {
+                if (!firestoreDb || !currentUserId || !dateValue) return;
+                setPeriodLogBusy(true);
+                setDailyLogMessage('');
+                try {
+                    const ref = firestoreDb.collection('users').doc(currentUserId)
+                        .collection('periodLogs').doc(dateValue);
+                    await ref.set({
+                        startDate: dateValue,
+                        source: dateValue === todayString ? 'today-button' : 'manual',
+                        createdAt: firebase.firestore.FieldValue.serverTimestamp()
+                    }, { merge: true });
+                    setPeriodLogs(prev => {
+                        const without = prev.filter(item => item.startDate !== dateValue);
+                        return [...without, { id: dateValue, startDate: dateValue, source: 'manual' }]
+                            .sort((a,b) => a.startDate.localeCompare(b.startDate));
+                    });
+                    setLastPeriodDate(dateValue);
+                    setDailyLogMessage(`Awal menstruasi ${new Date(dateValue + 'T00:00:00').toLocaleDateString('id-ID', { day:'numeric', month:'long', year:'numeric' })} tersimpan.`);
+                } catch (error) {
+                    console.error('Gagal menyimpan awal menstruasi:', error);
+                    setDailyLogMessage('Riwayat menstruasi belum berhasil disimpan. Periksa koneksi atau Firestore Rules.');
+                } finally {
+                    setPeriodLogBusy(false);
+                }
+            };
+
+            const requestNotificationPermission = async () => {
+                setReminderMessage('');
+                if (typeof Notification === 'undefined') {
+                    setNotificationPermission('unsupported');
+                    setReminderMessage('Browser ini belum mendukung Notification API.');
+                    return;
+                }
+                try {
+                    const permission = await Notification.requestPermission();
+                    setNotificationPermission(permission);
+                    if (permission === 'granted') {
+                        setReminderEnabled(true);
+                        setReminderMessage('Notifikasi diizinkan. Pengingat SiklusKu sudah aktif.');
+                        new Notification('SiklusKu aktif 🌸', { body: 'Pengingat menstruasi berhasil diaktifkan.' });
+                    } else {
+                        setReminderMessage('Izin notifikasi belum diberikan. Kamu bisa mengubah izin situs dari pengaturan browser.');
+                    }
+                } catch (error) {
+                    setReminderMessage('Notifikasi tidak dapat diaktifkan di browser ini. Pastikan website dibuka melalui HTTPS.');
+                }
+            };
+
+            const sendTestNotification = () => {
+                if (typeof Notification === 'undefined' || Notification.permission !== 'granted') {
+                    setReminderMessage('Aktifkan izin notifikasi terlebih dahulu.');
+                    return;
+                }
+                new Notification('Pengingat SiklusKu 🌸', {
+                    body: `Perkiraan menstruasi berikutnya sekitar ${cycleInfo.nextPeriodDate.toLocaleDateString('id-ID', { day:'numeric', month:'long' })}. Siapkan kebutuhanmu dan catat gejala bila ada.`
+                });
+                setReminderMessage('Notifikasi percobaan sudah dikirim.');
             };
 
             const updateWaterGlasses = (value) => {
@@ -628,6 +767,34 @@
                 return { currentDayOfCycle, phase: info.phase, phaseColor: info.color, daysUntilNextPeriod, nextPeriodDate };
             }, [lastPeriodDate, cycleLength, periodLength]);
 
+            // Pengingat browser lokal. Bekerja saat halaman/app masih berjalan.
+            // Untuk push yang tetap terkirim saat aplikasi benar-benar tertutup diperlukan service worker + push backend/FCM.
+            useEffect(() => {
+                if (!profileReady || !reminderEnabled || typeof Notification === 'undefined' || Notification.permission !== 'granted') return;
+
+                const maybeNotify = () => {
+                    const now = new Date();
+                    const [targetHour, targetMinute] = reminderTime.split(':').map(Number);
+                    const nowMinutes = now.getHours() * 60 + now.getMinutes();
+                    const targetMinutes = (targetHour || 0) * 60 + (targetMinute || 0);
+                    if (cycleInfo.daysUntilNextPeriod > Number(reminderDaysBefore) || nowMinutes < targetMinutes) return;
+
+                    const key = `siklusku_notified_${currentUserId}_${todayString}`;
+                    if (localStorage.getItem(key)) return;
+
+                    new Notification('Pengingat SiklusKu 🌸', {
+                        body: cycleInfo.daysUntilNextPeriod <= 1
+                            ? 'Menstruasi diperkirakan segera tiba. Siapkan kebutuhanmu dan catat perubahan tubuh hari ini.'
+                            : `Sekitar ${cycleInfo.daysUntilNextPeriod} hari lagi menuju perkiraan menstruasi. Catat gejala awal agar pola tubuhmu lebih mudah dikenali.`
+                    });
+                    localStorage.setItem(key, new Date().toISOString());
+                };
+
+                maybeNotify();
+                const interval = window.setInterval(maybeNotify, 60000);
+                return () => window.clearInterval(interval);
+            }, [profileReady, reminderEnabled, reminderDaysBefore, reminderTime, cycleInfo.daysUntilNextPeriod, currentUserId, todayString]);
+
             const currentTips = {
                 "Menstruasi": { quote: "Istirahatlah sejenak, tubuhmu sedang bekerja keras hari ini! 🌸", waterTarget: 8, dos: ["Teh Chamomile/Jahe hangat", "Sayuran hijau tua (bayam)", "Cokelat hitam", "Daging merah tanpa lemak"], donts: ["Kopi dan minuman berkafein tinggi", "Makanan terlalu asin", "Makanan pedas berlebihan"], exercise: ["Yoga peregangan ringan", "Jalan santai di pagi hari", "Child's pose"], activity: ["Kompres perut dengan air hangat", "Tidur minimal 8 jam", "Me-time menonton film santai"] },
                 "Paska Menstruasi": { quote: "Energi kembali penuh! Waktunya bersinar dan produktif! ✨", waterTarget: 8, dos: ["Makanan tinggi protein", "Buah-buahan segar", "Karbohidrat kompleks", "Yogurt / Probiotik"], donts: ["Makanan cepat saji", "Terlalu banyak gula buatan", "Gorengan berlebih"], exercise: ["Jogging ringan", "Bersepeda", "Zumba atau aerobik"], activity: ["Mulai proyek baru", "Bersosialisasi dengan teman", "Brainstorming ide"] },
@@ -641,7 +808,9 @@
                 { id: 3, category: "Olahraga", icon: Activity, time: "4 min baca", title: "Mitos Berkeringat: Bolehkah Olahraga Berat Saat Menstruasi?", desc: "Fakta dibalik mitos olahraga saat haid. Kapan tubuh bilang 'berhenti' dan kapan bilang 'lanjutkan'.", content: ["Banyak mitos beredar yang melarang wanita berolahraga saat sedang menstruasi. Faktanya, olahraga justru sangat dianjurkan! Berolahraga memicu produksi endorfin, yang merupakan obat penghilang rasa sakit alami dari dalam tubuh, sehingga dapat mengurangi kram punggung dan perut.", "Namun, intensitasnya perlu disesuaikan. Pada hari ke-1 dan ke-2 saat aliran darah sedang deras-derasnya, tubuh menggunakan banyak energi. Lakukan olahraga ringan seperti yoga, peregangan (stretching), atau jalan santai.", "Jika kamu merasa lemas, pusing, atau aliran darah bertambah drastis setelah berolahraga berat seperti HIIT atau angkat beban, itu adalah sinyal dari tubuh untuk 'berhenti' dan beristirahat. Dengarkan tubuhmu, karena tidak ada aturan baku yang sama untuk setiap wanita."] },
                 { id: 4, category: "Edukasi", icon: Info, time: "6 min baca", title: "Mengenal Fase Folikuler: Waktu Terbaik Memulai Hal Baru", desc: "Manfaatkan lonjakan energi pasca menstruasi untuk produktivitas maksimalmu.", content: ["Fase folikuler dimulai setelah menstruasi selesai dan berlangsung hingga masa ovulasi tiba. Di fase ini, kelenjar pituitari di otak melepaskan hormon perangsang folikel (FSH) yang memberi sinyal pada ovarium untuk mematangkan sel telur.", "Seiring matangnya sel telur, kadar hormon estrogen dalam tubuh akan meningkat tajam. Efeknya? Kamu akan merasa energi kembali penuh, pikiran lebih jernih, kulit terlihat lebih *glowing*, dan mood menjadi sangat positif dan optimis.", "Inilah mengapa fase folikuler disebut sebagai 'Musim Semi' dalam siklus wanita. Manfaatkan waktu emas ini untuk memulai proyek baru, melakukan presentasi penting, merencanakan jadwal sebulan ke depan, atau mempelajari keterampilan baru (hobi). Otak dan tubuhmu sedang berada dalam performa puncak!"] },
                 { id: 5, category: "Kesehatan", icon: Sparkles, time: "4 min baca", title: "Tanda-tanda Masa Subur (Ovulasi) yang Sering Tidak Disadari", desc: "Pelajari perubahan unik pada tubuhmu saat melepaskan sel telur.", content: ["Masa ovulasi adalah saat dimana ovarium melepaskan sel telur yang sudah matang. Selain menggunakan kalender, tubuh sebenarnya memberikan sinyal-sinyal alami yang seringkali tidak kita sadari.", "Tanda paling jelas adalah perubahan pada lendir serviks. Menjelang ovulasi, cairan akan menjadi lebih jernih, licin, dan melar mirip seperti putih telur mentah. Ini bertujuan untuk membantu sperma berenang lebih mudah.", "Selain itu, beberapa wanita mengalami peningkatan suhu tubuh basal (suhu tubuh saat bangun tidur pagi) sebesar 0.5 derajat. Tanda lainnya termasuk peningkatan indera penciuman, nyeri ringan di salah satu sisi perut bawah (disebut Mittelschmerz), dan peningkatan energi serta gairah secara alami."] },
-                { id: 6, category: "Kesehatan", icon: MoonIcon, time: "5 min baca", title: "Pentingnya Menjaga Kualitas Tidur Menjelang Hari H", desc: "Mengapa insomnia sering menyerang saat PMS dan bagaimana cara mengatasinya.", content: ["Pernahkah kamu merasa sangat sulit tidur beberapa hari sebelum menstruasi dimulai? Kamu tidak sendirian. Penurunan drastis hormon progesteron menjelang hari H seringkali memicu insomnia, kecemasan di malam hari, dan peningkatan suhu tubuh yang membuat tidur tidak nyenyak.", "Kurang tidur saat PMS akan memperparah gejala lainnya seperti kram, perubahan mood, dan rasa lelah berlebih. Oleh karena itu, *sleep hygiene* menjadi sangat penting di fase ini.", "Cobalah untuk menurunkan suhu kamar menjadi lebih sejuk, hindari menatap layar *gadget* (blue light) setidaknya satu jam sebelum tidur, dan lakukan rutinitas relaksasi seperti membaca buku atau mendengarkan musik *lo-fi*. Mandi air hangat sebelum tidur juga sangat dianjurkan karena saat tubuh mendingin setelah mandi, otak akan menangkap sinyal bahwa sudah waktunya untuk tidur."] }
+                { id: 6, category: "Kesehatan", icon: MoonIcon, time: "5 min baca", title: "Pentingnya Menjaga Kualitas Tidur Menjelang Hari H", desc: "Kebiasaan tidur yang lebih nyaman ketika gejala PMS mengganggu.", content: ["Sebagian orang mengalami perubahan kualitas tidur menjelang menstruasi. Perubahan hormon, rasa tidak nyaman, kram, atau perubahan mood dapat membuat tidur terasa lebih sulit.", "Coba pertahankan jam tidur dan bangun yang konsisten, buat kamar lebih nyaman, kurangi kafein pada sore atau malam hari, dan lakukan aktivitas relaksasi yang terasa cocok untukmu.", "Jika gangguan tidur berat, berlangsung lama, atau mengganggu kegiatan sehari-hari, bicarakan dengan tenaga kesehatan untuk mencari penyebab dan penanganan yang sesuai."] },
+                { id: 7, category: "Edukasi", icon: Droplets, time: "4 min baca", title: "Menjaga Kebersihan Saat Menstruasi", desc: "Kebiasaan sederhana agar tetap nyaman dan mengurangi iritasi.", content: ["Ganti pembalut, tampon, atau kosongkan menstrual cup sesuai petunjuk produk dan kebutuhan tubuhmu. Cuci tangan sebelum dan sesudah mengganti produk menstruasi.", "Bersihkan area luar genital dengan air bersih dan hindari produk berpewangi kuat atau douching karena dapat memicu iritasi pada sebagian orang. Gunakan pakaian dalam yang bersih dan nyaman.", "Jika muncul gatal berat, bau yang sangat berbeda, demam, nyeri panggul, atau cairan yang mengkhawatirkan, pertimbangkan pemeriksaan tenaga kesehatan."] },
+                { id: 8, category: "Waspada", icon: Stethoscope, time: "5 min baca", title: "Kapan Perubahan Menstruasi Perlu Diperiksakan?", desc: "Kenali perubahan yang sebaiknya tidak hanya dicatat, tetapi juga dikonsultasikan.", content: ["Pola menstruasi tiap orang berbeda, tetapi perubahan yang baru, menetap, atau mengganggu aktivitas layak diperhatikan. Catatan tanggal, lama perdarahan, gejala, dan tingkat nyeri dapat membantu saat berkonsultasi.", "Pertimbangkan berkonsultasi bila perdarahan berlangsung lebih dari sekitar 7 hari, harus mengganti produk menstruasi sangat sering, terdapat perdarahan di antara menstruasi atau setelah hubungan seksual, atau nyeri menjadi berat dan menghambat kegiatan harian.", "Cari pertolongan segera bila perdarahan sangat banyak disertai pusing berat, pingsan, sesak, nyeri hebat yang tidak biasa, atau ada kemungkinan kehamilan dengan perdarahan dan nyeri perut. SiklusKu bukan alat diagnosis."] }
             ];
 
             // --- AUTH / SETUP VIEWS ---
@@ -776,6 +945,13 @@
                     <p className="text-slate-500 dark:text-slate-400 mt-1">Gimana kabarmu hari ini? Mari kita cek siklusmu.</p>
                 </div>
 
+                <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+                    <button onClick={() => setActiveTab('catatan')} className="text-left p-4 bg-white dark:bg-slate-800 rounded-2xl border border-pink-100 dark:border-slate-700 hover:border-pink-300 transition-all"><ClipboardList size={20} className="text-pink-500 mb-2"/><div className="font-bold text-sm">Catat Gejala</div><div className="text-[11px] text-slate-400 mt-1">{dailySymptoms.length ? `${dailySymptoms.length} gejala tercatat` : 'Belum dicatat hari ini'}</div></button>
+                    <button onClick={() => setActiveTab('catatan')} className="text-left p-4 bg-white dark:bg-slate-800 rounded-2xl border border-pink-100 dark:border-slate-700 hover:border-pink-300 transition-all"><Activity size={20} className="text-purple-500 mb-2"/><div className="font-bold text-sm">Tingkat Nyeri</div><div className="text-[11px] text-slate-400 mt-1">{painLevel}/10 hari ini</div></button>
+                    <button onClick={() => setActiveTab('statistik')} className="text-left p-4 bg-white dark:bg-slate-800 rounded-2xl border border-pink-100 dark:border-slate-700 hover:border-pink-300 transition-all"><TrendingUp size={20} className="text-blue-500 mb-2"/><div className="font-bold text-sm">Grafik Siklus</div><div className="text-[11px] text-slate-400 mt-1">{periodLogs.length} tanggal tersimpan</div></button>
+                    <button onClick={() => setActiveTab('pengingat')} className="text-left p-4 bg-white dark:bg-slate-800 rounded-2xl border border-pink-100 dark:border-slate-700 hover:border-pink-300 transition-all"><Bell size={20} className="text-amber-500 mb-2"/><div className="font-bold text-sm">Pengingat</div><div className="text-[11px] text-slate-400 mt-1">{reminderEnabled ? `${reminderDaysBefore} hari sebelum` : 'Belum diaktifkan'}</div></button>
+                </div>
+
                 <div className="relative bg-white dark:bg-slate-800 rounded-[2.5rem] p-8 shadow-sm border border-pink-100 dark:border-slate-700 overflow-hidden flex flex-col md:flex-row items-center gap-8">
                     <div className={`absolute -right-20 -top-20 w-64 h-64 rounded-full mix-blend-multiply dark:mix-blend-soft-light filter blur-3xl opacity-30 ${cycleInfo.phaseColor}`}></div>
                     <div className={`absolute -left-20 -bottom-20 w-64 h-64 rounded-full mix-blend-multiply dark:mix-blend-soft-light filter blur-3xl opacity-30 bg-purple-300`}></div>
@@ -904,46 +1080,236 @@
                 );
             };
 
+            const CatatanView = () => {
+                const painLabel = painLevel === 0 ? 'Tidak nyeri' : painLevel <= 3 ? 'Ringan' : painLevel <= 6 ? 'Sedang' : painLevel <= 8 ? 'Berat' : 'Sangat berat';
+                const painClass = painLevel <= 3 ? 'text-green-600 bg-green-50 dark:bg-green-900/20' : painLevel <= 6 ? 'text-amber-600 bg-amber-50 dark:bg-amber-900/20' : 'text-red-600 bg-red-50 dark:bg-red-900/20';
+                return (
+                <div className="animate-in fade-in slide-in-from-bottom-4 duration-500 space-y-6">
+                    <div className="flex flex-col sm:flex-row sm:items-end justify-between gap-3 px-2">
+                        <div>
+                            <h2 className="text-2xl font-bold text-slate-800 dark:text-white flex items-center gap-2"><ClipboardList size={28} className="text-pink-500" /> Catatan Harian</h2>
+                            <p className="text-sm text-slate-500 dark:text-slate-400 mt-1">Catat gejala awal dan tingkat nyeri hari ini. Data tersimpan per tanggal di Firestore.</p>
+                        </div>
+                        <span className="text-xs font-bold bg-white dark:bg-slate-800 border border-pink-100 dark:border-slate-700 px-3 py-2 rounded-xl text-slate-500">{new Date().toLocaleDateString('id-ID', { weekday:'long', day:'numeric', month:'long', year:'numeric' })}</span>
+                    </div>
+
+                    {dailyLogMessage && <div className="p-4 rounded-2xl bg-green-50 dark:bg-green-900/20 border border-green-100 dark:border-green-900/30 text-green-700 dark:text-green-300 text-sm font-medium">{dailyLogMessage}</div>}
+
+                    <div className="bg-white dark:bg-slate-800 p-6 md:p-8 rounded-[2.5rem] shadow-sm border border-pink-100 dark:border-slate-700">
+                        <div className="flex items-center justify-between mb-5">
+                            <div>
+                                <h3 className="text-xl font-bold text-slate-800 dark:text-white">Gejala yang kamu rasakan</h3>
+                                <p className="text-sm text-slate-500 dark:text-slate-400 mt-1">Pilih semua yang sesuai. Kamu bisa mengubahnya kapan saja hari ini.</p>
+                            </div>
+                            <span className="text-sm font-bold text-pink-500">{dailySymptoms.length} dipilih</span>
+                        </div>
+                        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3">
+                            {symptomOptions.map(item => {
+                                const active = dailySymptoms.includes(item.id);
+                                return <button key={item.id} onClick={() => toggleSymptom(item.id)} className={`text-left p-4 rounded-2xl border transition-all active:scale-95 ${active ? 'bg-pink-50 dark:bg-pink-900/20 border-pink-400 ring-2 ring-pink-100 dark:ring-pink-900/30' : 'bg-slate-50 dark:bg-slate-700/50 border-slate-100 dark:border-slate-700 hover:border-pink-200'}`}>
+                                    <div className="text-2xl mb-2">{item.emoji}</div>
+                                    <div className={`text-sm font-semibold ${active ? 'text-pink-600 dark:text-pink-300' : 'text-slate-700 dark:text-slate-200'}`}>{item.label}</div>
+                                </button>
+                            })}
+                        </div>
+                    </div>
+
+                    <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                        <div className="bg-white dark:bg-slate-800 p-6 md:p-8 rounded-[2.5rem] shadow-sm border border-pink-100 dark:border-slate-700">
+                            <div className="flex items-center justify-between mb-5">
+                                <div>
+                                    <h3 className="text-xl font-bold">Tingkat nyeri</h3>
+                                    <p className="text-sm text-slate-500 dark:text-slate-400">Skala 0–10 berdasarkan yang kamu rasakan.</p>
+                                </div>
+                                <span className={`px-3 py-1.5 rounded-full text-xs font-bold ${painClass}`}>{painLevel}/10 · {painLabel}</span>
+                            </div>
+                            <div className="grid grid-cols-6 gap-2">
+                                {Array.from({length: 11}).map((_, i) => <button key={i} onClick={() => { setPainLevel(i); setDailyLogMessage(''); }} className={`aspect-square rounded-xl font-black transition-all ${painLevel === i ? 'bg-pink-500 text-white shadow-md scale-105' : 'bg-slate-100 dark:bg-slate-700 text-slate-500 hover:bg-pink-50 dark:hover:bg-slate-600'}`}>{i}</button>)}
+                            </div>
+                            {painLevel >= 7 && <div className="mt-5 p-4 rounded-2xl bg-red-50 dark:bg-red-900/20 border border-red-100 dark:border-red-900/30 text-sm text-red-700 dark:text-red-300 leading-relaxed"><b>Nyeri yang kamu catat cukup berat.</b> Jika nyeri sangat berat, memburuk, tidak membaik dengan penanganan biasa, atau menghambat aktivitas harian, pertimbangkan berkonsultasi dengan tenaga kesehatan.</div>}
+                        </div>
+
+                        <div className="bg-white dark:bg-slate-800 p-6 md:p-8 rounded-[2.5rem] shadow-sm border border-pink-100 dark:border-slate-700 flex flex-col">
+                            <h3 className="text-xl font-bold mb-1">Catatan tambahan</h3>
+                            <p className="text-sm text-slate-500 dark:text-slate-400 mb-4">Contoh: mulai flek sore hari, kram membaik setelah istirahat, atau aktivitas yang terganggu.</p>
+                            <textarea value={dailyNotes} onChange={(e) => { setDailyNotes(e.target.value); setDailyLogMessage(''); }} maxLength="500" rows="7" placeholder="Tulis catatan singkat di sini..." className="w-full flex-1 resize-none bg-slate-50 dark:bg-slate-700/50 border border-slate-100 dark:border-slate-700 rounded-2xl p-4 outline-none focus:ring-2 focus:ring-pink-300 text-sm"></textarea>
+                            <div className="text-right text-[11px] text-slate-400 mt-2">{dailyNotes.length}/500</div>
+                        </div>
+                    </div>
+
+                    <div className="grid grid-cols-1 md:grid-cols-[1fr_auto] gap-4 bg-gradient-to-r from-pink-500 to-purple-500 rounded-[2rem] p-5 md:p-6 text-white shadow-lg">
+                        <div>
+                            <h3 className="font-black text-xl">Mulai menstruasi hari ini?</h3>
+                            <p className="text-sm text-white/80 mt-1">Simpan tanggal mulai agar prediksi dan grafik siklus berikutnya menjadi semakin berbasis riwayatmu sendiri.</p>
+                        </div>
+                        <button onClick={() => savePeriodStart(todayString)} disabled={periodLogBusy} className="self-center bg-white text-pink-600 font-bold px-5 py-3 rounded-2xl shadow-sm disabled:opacity-60">{periodLogBusy ? 'Menyimpan...' : 'Catat Haid Mulai Hari Ini'}</button>
+                    </div>
+
+                    <button onClick={saveHealthLog} className="w-full bg-slate-900 dark:bg-white dark:text-slate-900 text-white py-4 rounded-2xl font-black flex items-center justify-center gap-2 shadow-md hover:scale-[1.01] transition-transform"><Save size={20}/> Simpan Catatan Hari Ini</button>
+                </div>
+                );
+            };
+
+            const ReminderView = () => (
+                <div className="animate-in fade-in slide-in-from-bottom-4 duration-500 space-y-6">
+                    <div className="px-2">
+                        <h2 className="text-2xl font-bold text-slate-800 dark:text-white flex items-center gap-2"><Bell size={28} className="text-pink-500" /> Pengingat Menstruasi</h2>
+                        <p className="text-sm text-slate-500 dark:text-slate-400 mt-1">Atur pengingat menjelang estimasi menstruasi berikutnya.</p>
+                    </div>
+                    {reminderMessage && <div className="p-4 rounded-2xl bg-blue-50 dark:bg-blue-900/20 border border-blue-100 dark:border-blue-900/30 text-blue-700 dark:text-blue-300 text-sm">{reminderMessage}</div>}
+                    <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                        <div className="bg-white dark:bg-slate-800 p-6 md:p-8 rounded-[2.5rem] border border-pink-100 dark:border-slate-700 shadow-sm">
+                            <div className="flex items-start justify-between gap-4 mb-6">
+                                <div>
+                                    <h3 className="text-xl font-bold">Notifikasi browser</h3>
+                                    <p className="text-sm text-slate-500 dark:text-slate-400 mt-1">Status izin: <b className="capitalize">{notificationPermission}</b></p>
+                                </div>
+                                <div className={`w-12 h-12 rounded-2xl flex items-center justify-center ${notificationPermission === 'granted' ? 'bg-green-100 text-green-600' : 'bg-pink-100 text-pink-500'}`}><Bell size={24}/></div>
+                            </div>
+                            {notificationPermission !== 'granted' ?
+                                <button onClick={requestNotificationPermission} className="w-full bg-pink-500 text-white font-bold py-3.5 rounded-2xl">Aktifkan Izin Notifikasi</button> :
+                                <div className="space-y-3">
+                                    <label className="flex items-center justify-between p-4 bg-slate-50 dark:bg-slate-700/50 rounded-2xl">
+                                        <span className="font-semibold">Pengingat aktif</span>
+                                        <input type="checkbox" checked={reminderEnabled} onChange={(e) => setReminderEnabled(e.target.checked)} className="w-5 h-5 accent-pink-500" />
+                                    </label>
+                                    <button onClick={sendTestNotification} className="w-full border border-pink-200 dark:border-slate-600 text-pink-600 dark:text-pink-300 font-bold py-3 rounded-2xl">Kirim Notifikasi Percobaan</button>
+                                </div>
+                            }
+                        </div>
+                        <div className="bg-white dark:bg-slate-800 p-6 md:p-8 rounded-[2.5rem] border border-pink-100 dark:border-slate-700 shadow-sm space-y-5">
+                            <div>
+                                <label className="text-sm font-bold flex justify-between mb-2"><span>Ingatkan sebelum haid</span><span className="text-pink-500">{reminderDaysBefore} hari</span></label>
+                                <input type="range" min="1" max="7" value={reminderDaysBefore} onChange={(e) => setReminderDaysBefore(Number(e.target.value))} className="w-full accent-pink-500" />
+                            </div>
+                            <div>
+                                <label className="text-sm font-bold block mb-2">Waktu notifikasi</label>
+                                <input type="time" value={reminderTime} onChange={(e) => setReminderTime(e.target.value)} className="w-full bg-pink-50 dark:bg-slate-700 rounded-2xl p-4 border-0 outline-none focus:ring-2 focus:ring-pink-300" />
+                            </div>
+                            <div className="p-4 rounded-2xl bg-purple-50 dark:bg-purple-900/20 text-sm text-purple-700 dark:text-purple-300">
+                                Estimasi berikutnya: <b>{cycleInfo.nextPeriodDate.toLocaleDateString('id-ID', { day:'numeric', month:'long', year:'numeric' })}</b> · sekitar {cycleInfo.daysUntilNextPeriod} hari lagi.
+                            </div>
+                        </div>
+                    </div>
+                    <div className="p-5 rounded-3xl border border-amber-200 dark:border-amber-900/40 bg-amber-50 dark:bg-amber-900/20 text-sm text-amber-800 dark:text-amber-200 leading-relaxed">
+                        <b>Catatan teknis:</b> versi single-file ini memakai Notification API browser. Notifikasi otomatis dapat berjalan selama halaman/app masih aktif. Agar notifikasi tetap terjadwal ketika aplikasi benar-benar ditutup, tahap berikutnya perlu Service Worker + Web Push/FCM dan proses penjadwalan dari backend.
+                    </div>
+                </div>
+            );
+
+            const HealthInfoView = () => {
+                const consultItems = [
+                    ['Perdarahan sangat banyak', 'Harus mengganti pembalut/tampon sekitar setiap 1–2 jam, sering bocor, atau perlu memakai dua jenis produk sekaligus.'],
+                    ['Menstruasi berlangsung lama', 'Perdarahan berlangsung lebih dari sekitar 7 hari atau jauh lebih lama dari pola biasanya.'],
+                    ['Nyeri berat', 'Nyeri menstruasi berat, memburuk, tidak tertolong dengan penanganan biasa, atau sampai menghambat aktivitas sehari-hari.'],
+                    ['Perdarahan di luar siklus', 'Ada perdarahan di antara menstruasi atau setelah hubungan seksual.'],
+                    ['Perubahan pola yang menetap', 'Siklus menjadi sangat tidak teratur atau berubah nyata dibanding pola yang biasanya kamu alami.']
+                ];
+                return (
+                <div className="animate-in fade-in slide-in-from-bottom-4 duration-500 space-y-6">
+                    <div className="px-2">
+                        <h2 className="text-2xl font-bold flex items-center gap-2"><Stethoscope size={28} className="text-pink-500" /> Edukasi & Kapan Berkonsultasi</h2>
+                        <p className="text-sm text-slate-500 dark:text-slate-400 mt-1">Informasi ini membantu mengenali pola, bukan untuk mendiagnosis penyakit.</p>
+                    </div>
+                    <div className="bg-white dark:bg-slate-800 p-6 md:p-8 rounded-[2.5rem] border border-pink-100 dark:border-slate-700 shadow-sm">
+                        <h3 className="text-xl font-black mb-2">Tanda menstruasi yang sebaiknya diperiksakan</h3>
+                        <p className="text-sm text-slate-500 dark:text-slate-400 mb-6">Perubahan satu kali belum tentu berarti ada masalah, tetapi pola baru yang menetap atau mengganggu kehidupan sehari-hari layak dibicarakan dengan tenaga kesehatan.</p>
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                            {consultItems.map(([title, desc], idx) => <div key={idx} className="p-5 rounded-2xl bg-slate-50 dark:bg-slate-700/50 border border-slate-100 dark:border-slate-700"><div className="flex items-start gap-3"><AlertCircle size={20} className="text-amber-500 mt-0.5 flex-shrink-0"/><div><h4 className="font-bold mb-1">{title}</h4><p className="text-sm text-slate-600 dark:text-slate-300 leading-relaxed">{desc}</p></div></div></div>)}
+                        </div>
+                    </div>
+                    <div className="bg-red-50 dark:bg-red-900/20 p-6 md:p-8 rounded-[2.5rem] border border-red-200 dark:border-red-900/40">
+                        <h3 className="text-xl font-black text-red-700 dark:text-red-300 flex items-center gap-2"><AlertCircle size={24}/> Cari pertolongan segera bila...</h3>
+                        <p className="mt-3 text-sm leading-relaxed text-red-700 dark:text-red-200">Perdarahan sangat banyak disertai pusing berat, pingsan, sesak napas, kelemahan yang nyata, nyeri hebat yang tidak biasa, atau bila ada kemungkinan kehamilan disertai perdarahan dan nyeri perut/panggul. Gunakan layanan kesehatan setempat sesuai tingkat kegawatannya.</p>
+                    </div>
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                        <div className="p-5 bg-white dark:bg-slate-800 rounded-3xl border border-pink-100 dark:border-slate-700"><div className="text-3xl mb-3">🗓️</div><h4 className="font-bold">Bawa riwayat tanggal</h4><p className="text-sm text-slate-500 mt-2">Catat hari pertama, lama perdarahan, serta jarak antar siklus.</p></div>
+                        <div className="p-5 bg-white dark:bg-slate-800 rounded-3xl border border-pink-100 dark:border-slate-700"><div className="text-3xl mb-3">🩸</div><h4 className="font-bold">Catat perubahan perdarahan</h4><p className="text-sm text-slate-500 mt-2">Frekuensi mengganti produk menstruasi dan adanya perdarahan di luar jadwal bisa membantu evaluasi.</p></div>
+                        <div className="p-5 bg-white dark:bg-slate-800 rounded-3xl border border-pink-100 dark:border-slate-700"><div className="text-3xl mb-3">📊</div><h4 className="font-bold">Tunjukkan gejala & nyeri</h4><p className="text-sm text-slate-500 mt-2">Catatan gejala dan skala nyeri dari SiklusKu dapat menjadi ringkasan untuk konsultasi.</p></div>
+                    </div>
+                    <div className="text-xs text-slate-400 px-2">Referensi edukasi dalam rancangan fitur: NHS – Heavy periods, Period pain, Irregular periods, dan Vaginal bleeding between periods or after sex. Informasi dapat berubah dan tidak menggantikan evaluasi klinis.</div>
+                </div>
+                );
+            };
+
             const StatistikView = () => {
-                const pastCycles = [28, 29, 27, 30, 28, cycleLength];
-                const avgCycle = Math.round(pastCycles.reduce((a,b)=>a+b,0) / pastCycles.length);
+                const sortedPeriods = [...periodLogs].filter(item => item.startDate).sort((a,b) => a.startDate.localeCompare(b.startDate));
+                const cycleHistory = sortedPeriods.slice(1).map((item, idx) => {
+                    const previous = new Date(sortedPeriods[idx].startDate + 'T00:00:00');
+                    const current = new Date(item.startDate + 'T00:00:00');
+                    const days = Math.round((current - previous) / 86400000);
+                    return { startDate: item.startDate, length: days };
+                }).filter(item => item.length > 0 && item.length < 120);
+                const visibleCycles = cycleHistory.slice(-6);
+                const avgCycle = visibleCycles.length ? Math.round(visibleCycles.reduce((sum,item)=>sum+item.length,0) / visibleCycles.length) : cycleLength;
+                const minCycle = visibleCycles.length ? Math.min(...visibleCycles.map(item=>item.length)) : null;
+                const maxCycle = visibleCycles.length ? Math.max(...visibleCycles.map(item=>item.length)) : null;
+                const variability = minCycle !== null ? maxCycle - minCycle : null;
+                const chartMax = Math.max(40, ...visibleCycles.map(item => item.length));
 
                 return (
                 <div className="animate-in fade-in slide-in-from-bottom-4 duration-500 space-y-6">
-                    <h2 className="text-2xl font-bold text-slate-800 dark:text-white flex items-center gap-2 px-2"><TrendingUp size={28} className="text-pink-500" /> Statistik Kesehatan</h2>
+                    <div className="flex flex-col md:flex-row md:items-end justify-between gap-4 px-2">
+                        <div>
+                            <h2 className="text-2xl font-bold text-slate-800 dark:text-white flex items-center gap-2"><TrendingUp size={28} className="text-pink-500" /> Grafik & Riwayat Siklus</h2>
+                            <p className="text-sm text-slate-500 dark:text-slate-400 mt-1">Grafik dihitung dari tanggal awal menstruasi yang benar-benar kamu simpan.</p>
+                        </div>
+                        <div className="flex flex-col sm:flex-row gap-2">
+                            <input type="date" max={todayString} value={periodStartInput} onChange={(e)=>setPeriodStartInput(e.target.value)} className="bg-white dark:bg-slate-800 border border-pink-100 dark:border-slate-700 rounded-2xl px-4 py-3 text-sm outline-none focus:ring-2 focus:ring-pink-300"/>
+                            <button onClick={() => savePeriodStart(periodStartInput)} disabled={periodLogBusy} className="bg-pink-500 text-white font-bold px-4 py-3 rounded-2xl flex items-center justify-center gap-2 disabled:opacity-60"><Plus size={18}/>{periodLogBusy ? 'Menyimpan...' : 'Tambah Awal Haid'}</button>
+                        </div>
+                    </div>
+
+                    {dailyLogMessage && <div className="p-4 rounded-2xl bg-green-50 dark:bg-green-900/20 border border-green-100 dark:border-green-900/30 text-green-700 dark:text-green-300 text-sm">{dailyLogMessage}</div>}
+
                     <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                    <div className="bg-gradient-to-br from-pink-400 to-rose-400 rounded-3xl p-6 text-white shadow-md">
-                        <p className="text-pink-100 font-medium text-sm mb-1">Rata-rata Siklus</p>
-                        <div className="flex items-end gap-2"><span className="text-4xl font-black">{avgCycle}</span><span className="text-pink-100 mb-1">Hari</span></div>
-                        <p className="text-xs mt-4 bg-white/20 inline-block px-3 py-1 rounded-full backdrop-blur-sm">Normal & Teratur</p>
+                        <div className="bg-gradient-to-br from-pink-400 to-rose-400 rounded-3xl p-6 text-white shadow-md">
+                            <p className="text-pink-100 font-medium text-sm mb-1">Rata-rata Siklus Tercatat</p>
+                            <div className="flex items-end gap-2"><span className="text-4xl font-black">{avgCycle}</span><span className="text-pink-100 mb-1">Hari</span></div>
+                            <p className="text-xs mt-4 bg-white/20 inline-block px-3 py-1 rounded-full backdrop-blur-sm">{visibleCycles.length ? `${visibleCycles.length} siklus terbaru` : 'Menunggu ≥ 2 tanggal awal haid'}</p>
+                        </div>
+                        <div className="bg-gradient-to-br from-fuchsia-400 to-purple-500 rounded-3xl p-6 text-white shadow-md">
+                            <p className="text-fuchsia-100 font-medium text-sm mb-1">Lama Menstruasi Acuan</p>
+                            <div className="flex items-end gap-2"><span className="text-4xl font-black">{periodLength}</span><span className="text-fuchsia-100 mb-1">Hari</span></div>
+                            <p className="text-xs mt-4 bg-white/20 inline-block px-3 py-1 rounded-full backdrop-blur-sm">Bisa diubah dari pengaturan</p>
+                        </div>
+                        <div className="bg-gradient-to-br from-blue-400 to-cyan-400 rounded-3xl p-6 text-white shadow-md">
+                            <p className="text-blue-100 font-medium text-sm mb-1">Variasi 6 Siklus</p>
+                            <div className="flex items-end gap-2"><span className="text-4xl font-black">{variability ?? '—'}</span>{variability !== null && <span className="text-blue-100 mb-1">Hari</span>}</div>
+                            <p className="text-xs mt-4 bg-white/20 inline-block px-3 py-1 rounded-full backdrop-blur-sm">{variability === null ? 'Belum cukup data' : `Terpendek ${minCycle} · terpanjang ${maxCycle}`}</p>
+                        </div>
                     </div>
-                    <div className="bg-gradient-to-br from-fuchsia-400 to-purple-500 rounded-3xl p-6 text-white shadow-md">
-                        <p className="text-fuchsia-100 font-medium text-sm mb-1">Rata-rata Haid</p>
-                        <div className="flex items-end gap-2"><span className="text-4xl font-black">{periodLength}</span><span className="text-fuchsia-100 mb-1">Hari</span></div>
-                        <p className="text-xs mt-4 bg-white/20 inline-block px-3 py-1 rounded-full backdrop-blur-sm">Sehat</p>
-                    </div>
-                    <div className="bg-gradient-to-br from-blue-400 to-cyan-400 rounded-3xl p-6 text-white shadow-md">
-                        <p className="text-blue-100 font-medium text-sm mb-1">Skor Hidrasi Bulan Ini</p>
-                        <div className="flex items-end gap-2"><span className="text-4xl font-black">85</span><span className="text-blue-100 mb-1">%</span></div>
-                        <p className="text-xs mt-4 bg-white/20 inline-block px-3 py-1 rounded-full backdrop-blur-sm">Sangat Baik 💧</p>
-                    </div>
-                    </div>
+
                     <div className="bg-white dark:bg-slate-800 p-6 md:p-8 rounded-[2.5rem] shadow-sm border border-pink-100 dark:border-slate-700">
-                    <h3 className="font-bold text-slate-800 dark:text-white mb-6">Riwayat Panjang Siklus (6 Bulan)</h3>
-                    <div className="h-48 flex items-end justify-between gap-2 md:gap-4 mt-8 px-4">
-                        {pastCycles.map((val, idx) => {
-                        const heightPct = Math.min((val / 35) * 100, 100);
-                        const isCurrent = idx === pastCycles.length - 1;
-                        return (
-                            <div key={idx} className="flex flex-col items-center flex-1 group">
-                            <div className="opacity-0 group-hover:opacity-100 transition-opacity text-xs font-bold text-slate-600 dark:text-slate-300 mb-2">{val} hr</div>
-                            <div className={`w-full max-w-[40px] rounded-t-xl transition-all duration-700 ${isCurrent ? 'bg-pink-500 shadow-md' : 'bg-pink-200 dark:bg-slate-600 group-hover:bg-pink-300 dark:group-hover:bg-slate-500'}`} style={{ height: `${heightPct}%` }}></div>
-                            <div className="text-xs text-slate-400 mt-3 font-medium">Bln {idx+1}</div>
-                            </div>
-                        )
-                        })}
+                        <div className="flex justify-between gap-4 items-center mb-6">
+                            <div><h3 className="font-bold text-slate-800 dark:text-white">Panjang Siklus Terbaru</h3><p className="text-xs text-slate-400 mt-1">Jarak hari dari awal haid ke awal haid berikutnya.</p></div>
+                            <span className="text-xs font-bold text-pink-500 bg-pink-50 dark:bg-pink-900/20 px-3 py-1.5 rounded-full">Data asli</span>
+                        </div>
+                        {visibleCycles.length ? <div className="h-56 flex items-end justify-between gap-2 md:gap-4 mt-5 px-2 sm:px-4">
+                            {visibleCycles.map((item, idx) => {
+                                const heightPct = Math.max(8, Math.min((item.length / chartMax) * 100, 100));
+                                const labelDate = new Date(item.startDate + 'T00:00:00').toLocaleDateString('id-ID', { month:'short', year:'2-digit' });
+                                return <div key={item.startDate} className="flex flex-col items-center flex-1 group h-full justify-end">
+                                    <div className="text-xs font-bold text-slate-600 dark:text-slate-300 mb-2">{item.length} hr</div>
+                                    <div className="w-full max-w-[54px] rounded-t-xl bg-gradient-to-t from-pink-500 to-purple-400 shadow-sm transition-all group-hover:scale-x-105" style={{height:`${heightPct}%`}}></div>
+                                    <div className="text-[10px] sm:text-xs text-slate-400 mt-3 font-medium whitespace-nowrap">{labelDate}</div>
+                                </div>
+                            })}
+                        </div> : <div className="py-14 text-center">
+                            <div className="w-16 h-16 mx-auto rounded-full bg-pink-50 dark:bg-slate-700 flex items-center justify-center text-pink-500 mb-4"><TrendingUp size={28}/></div>
+                            <h4 className="font-bold">Grafik akan muncul setelah ada minimal 2 tanggal awal haid</h4>
+                            <p className="text-sm text-slate-500 dark:text-slate-400 mt-2 max-w-md mx-auto">Tambah riwayat menstruasi sebelumnya dengan kolom tanggal di atas, atau gunakan tombol “Catat Haid Mulai Hari Ini” pada Catatan Harian saat menstruasi berikutnya dimulai.</p>
+                        </div>}
                     </div>
+
+                    <div className="bg-white dark:bg-slate-800 p-6 md:p-8 rounded-[2.5rem] shadow-sm border border-pink-100 dark:border-slate-700">
+                        <h3 className="font-bold mb-4">Riwayat awal menstruasi</h3>
+                        <div className="space-y-2 max-h-72 overflow-y-auto pr-1">
+                            {[...sortedPeriods].reverse().map((item, idx) => <div key={item.id || item.startDate} className="flex items-center justify-between p-4 bg-slate-50 dark:bg-slate-700/50 rounded-2xl"><div className="flex items-center gap-3"><div className="w-9 h-9 rounded-xl bg-red-100 dark:bg-red-900/30 text-red-500 flex items-center justify-center"><Droplet size={18} className="fill-red-500"/></div><div><div className="font-bold text-sm">{new Date(item.startDate + 'T00:00:00').toLocaleDateString('id-ID', { day:'numeric', month:'long', year:'numeric' })}</div><div className="text-[11px] text-slate-400">Hari pertama menstruasi</div></div></div>{idx === 0 && <span className="text-[10px] font-bold text-pink-500 bg-pink-50 dark:bg-pink-900/20 px-2 py-1 rounded-full">TERBARU</span>}</div>)}
+                            {!sortedPeriods.length && <p className="text-sm text-slate-400 text-center py-8">Belum ada riwayat.</p>}
+                        </div>
                     </div>
+                    <div className="text-xs text-slate-400 px-2">Grafik dan prediksi membantu melihat pola, bukan menentukan diagnosis atau memastikan tanggal menstruasi/ovulasi.</div>
                 </div>
                 );
             };
@@ -1026,9 +1392,12 @@
                     <nav className="space-y-2">
                         {[
                         { id: 'beranda', icon: Activity, label: "Beranda" },
+                        { id: 'catatan', icon: ClipboardList, label: "Catatan Gejala & Nyeri" },
                         { id: 'kalender', icon: Calendar, label: "Kalender" },
-                        { id: 'statistik', icon: TrendingUp, label: "Statistik Kesehatan" },
+                        { id: 'statistik', icon: TrendingUp, label: "Grafik Siklus" },
                         { id: 'artikel', icon: BookOpen, label: "Artikel Edukasi" },
+                        { id: 'kesehatan', icon: Stethoscope, label: "Kapan Konsultasi" },
+                        { id: 'pengingat', icon: Bell, label: "Pengingat" },
                         ].map((item) => (
                         <button key={item.id} onClick={() => { setActiveTab(item.id); setIsSidebarOpen(false); if(item.id !== 'artikel') setSelectedArticle(null); }} className={`w-full flex items-center gap-3 px-4 py-3 rounded-2xl transition-all ${activeTab === item.id ? 'bg-pink-500 text-white shadow-md shadow-pink-200 dark:shadow-none' : 'text-slate-600 dark:text-slate-400 hover:bg-pink-50 dark:hover:bg-slate-700 hover:text-pink-500'}`}>
                             <item.icon size={20} /> <span className="font-medium">{item.label}</span>
@@ -1037,8 +1406,8 @@
                     </nav>
                     </div>
 
-<a href="https://instagram.com/xdaniel04" target="_blank" rel="noopener noreferrer" class="menu-item instagram-link">
-    <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="menu-icon">
+<a href="https://instagram.com/xdaniel04" target="_blank" rel="noopener noreferrer" className="menu-item instagram-link">
+    <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="menu-icon">
         <rect x="2" y="2" width="20" height="20" rx="5" ry="5"></rect>
         <path d="M16 11.37A4 4 0 1 1 12.63 8 4 4 0 0 1 16 11.37z"></path>
         <line x1="17.5" y1="6.5" x2="17.51" y2="6.5"></line>
@@ -1058,7 +1427,7 @@
                     <header className="h-20 flex items-center justify-between px-6 lg:px-10 bg-white/80 dark:bg-slate-900/80 backdrop-blur-md sticky top-0 z-30 border-b border-pink-100/50 dark:border-slate-800">
                     <div className="flex items-center gap-4">
                         <button onClick={() => setIsSidebarOpen(true)} className="lg:hidden p-2 text-slate-600 dark:text-slate-300 hover:bg-pink-50 dark:hover:bg-slate-800 rounded-xl"><Menu size={24} /></button>
-                        <h1 className="text-xl font-black text-slate-800 dark:text-white capitalize hidden sm:block">{activeTab === 'beranda' ? 'Dashboard' : activeTab}</h1>
+                        <h1 className="text-xl font-black text-slate-800 dark:text-white capitalize hidden sm:block">{({beranda:'Dashboard',catatan:'Catatan Harian',kalender:'Kalender Siklus',statistik:'Grafik Siklus',artikel:'Artikel Edukasi',kesehatan:'Kapan Konsultasi',pengingat:'Pengingat'})[activeTab] || activeTab}</h1>
                     </div>
                     <div className="flex items-center gap-4">
                         <div className={`hidden md:flex items-center gap-2 px-3 py-1.5 rounded-full text-xs font-bold ${syncState === 'error' ? 'bg-red-50 dark:bg-red-900/20 text-red-500' : syncState === 'syncing' ? 'bg-amber-50 dark:bg-amber-900/20 text-amber-500' : 'bg-green-50 dark:bg-green-900/20 text-green-600 dark:text-green-400'}`} title="Status sinkronisasi Firebase">
@@ -1077,9 +1446,12 @@
                     <div className="flex-1 overflow-y-auto p-4 sm:p-6 lg:p-10 pb-24 scroll-smooth">
                     <div className="max-w-5xl mx-auto">
                         {activeTab === 'beranda' && <BerandaView />}
+                        {activeTab === 'catatan' && <CatatanView />}
                         {activeTab === 'kalender' && <KalenderView />}
                         {activeTab === 'statistik' && <StatistikView />}
                         {activeTab === 'artikel' && <ArtikelView />}
+                        {activeTab === 'kesehatan' && <HealthInfoView />}
+                        {activeTab === 'pengingat' && <ReminderView />}
                     </div>
                     </div>
                 </main>
